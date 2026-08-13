@@ -1,10 +1,7 @@
-// Fill in your own Supabase project's values (Settings → API in the Supabase dashboard).
-// See README.md for the SQL to create the `trips` table and its Row Level Security policy.
-// These placeholders are a syntactically valid URL/key so the app can still boot (theme,
-// language, disclaimers, etc.) and fail gracefully on sign-in rather than crashing outright
-// if you forget to configure your own project before deploying.
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_KEY = 'your-anon-key';
+// Points at the existing Supabase project originally used by Schengen Buddy. Make sure the
+// `trips` table has the `excluded_ranges` jsonb column (see README) before relying on it.
+const SUPABASE_URL = 'https://dwjftvqlynlefwruvwfs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_JPZoPe7suyMtyV-EEEqD8Q_ksgb0Q9o';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000; // auto sign-out after 1 day of not opening the app
 
