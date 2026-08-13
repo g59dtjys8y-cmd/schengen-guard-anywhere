@@ -1,7 +1,7 @@
 {
-  "name": "Schengen Guard",
-  "short_name": "Schengen Guard",
-  "description": "Track Schengen 90/180-day rolling window compliance",
+  "name": "Schengen Guard Anywhere",
+  "short_name": "SG Anywhere",
+  "description": "Track Schengen 90/180-day rolling window compliance, synced across your devices",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

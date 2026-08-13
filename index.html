@@ -3,38 +3,57 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Schengen Guard</title>
+<title>Schengen Guard Anywhere</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f3f2f2">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script>
 (function(){
-  var t = localStorage.getItem('schengenGuardTheme');
+  var t = localStorage.getItem('schengenGuardAnywhereTheme');
   if(t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
   var params = new URLSearchParams(location.search);
   var urlLang = params.get('lang');
   var validLangs = ['en','zh','ja'];
-  var lang = validLangs.indexOf(urlLang) !== -1 ? urlLang : (localStorage.getItem('schengenGuardLang') || 'en');
+  var lang = validLangs.indexOf(urlLang) !== -1 ? urlLang : (localStorage.getItem('schengenGuardAnywhereLang') || 'en');
   document.documentElement.setAttribute('lang', lang);
   document.documentElement.setAttribute('data-lang', lang);
 })();
 </script>
-<link rel="alternate" hreflang="en" href="https://g59dtjys8y-cmd.github.io/schengen-guard/?lang=en">
-<link rel="alternate" hreflang="zh" href="https://g59dtjys8y-cmd.github.io/schengen-guard/?lang=zh">
-<link rel="alternate" hreflang="ja" href="https://g59dtjys8y-cmd.github.io/schengen-guard/?lang=ja">
-<link rel="alternate" hreflang="x-default" href="https://g59dtjys8y-cmd.github.io/schengen-guard/">
+<link rel="alternate" hreflang="en" href="https://g59dtjys8y-cmd.github.io/schengen-guard-anywhere/?lang=en">
+<link rel="alternate" hreflang="zh" href="https://g59dtjys8y-cmd.github.io/schengen-guard-anywhere/?lang=zh">
+<link rel="alternate" hreflang="ja" href="https://g59dtjys8y-cmd.github.io/schengen-guard-anywhere/?lang=ja">
+<link rel="alternate" hreflang="x-default" href="https://g59dtjys8y-cmd.github.io/schengen-guard-anywhere/">
 
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <div class="page">
 
   <div class="masthead">
-    <h1>Schengen Guard</h1>
+    <h1>Schengen Guard Anywhere</h1>
     <span class="tag tag-accent" id="todayTag">—</span>
   </div>
 
-  <div id="appBody">
+  <div id="authPanel">
+    <div id="signedOutView" class="card">
+      <h2 data-i18n="auth.signInHeading">Sign in</h2>
+      <p class="desc" data-i18n="auth.signInDesc">Sign in or create an account to sync your trips across every device you use Schengen Guard Anywhere on.</p>
+      <div class="field">
+        <label for="authEmail" data-i18n="auth.email">Email</label>
+        <input class="input" type="email" id="authEmail" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="authPassword" data-i18n="auth.password">Password</label>
+        <input class="input" type="password" id="authPassword" placeholder="At least 6 characters">
+      </div>
+      <button type="button" class="btn btn-primary btn-block" id="signInBtn" data-i18n="auth.signIn">Sign in</button>
+      <button type="button" class="btn btn-secondary btn-block" id="signUpBtn" data-i18n="auth.createAccount">Create account</button>
+      <div class="form-error" id="authError" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div id="appBody" style="display:none;">
 
     <!-- HOME -->
     <div class="screen" id="tab-home">
@@ -42,7 +61,7 @@
         <button type="button" class="btn btn-primary btn-icon" id="homeAddTripBtn" aria-label="Add a trip">+</button>
       </div>
       <div class="card backup-nudge" id="backupNudge" style="display:none;">
-        <p class="card-body" style="margin:0;" id="backupNudgeText">Your trips live only on this device. <a href="#" id="backupNudgeLink">Back them up</a> so you don't lose them.</p>
+        <p class="card-body" style="margin:0;" id="backupNudgeText">Want a local copy too? <a href="#" id="backupNudgeLink">Back them up</a> from Settings.</p>
         <button type="button" class="link-btn" id="backupNudgeDismiss" aria-label="Dismiss" data-i18n="backupNudge.dismiss">Dismiss</button>
       </div>
 
@@ -139,19 +158,19 @@
       <div class="card">
         <div class="card-kicker" data-i18n="privacy.noticeTitle">Privacy Notice</div>
         <ul class="legal-list">
-          <li data-i18n="privacy.notice.1">No account, no sign-in, no server, no network calls of any kind.</li>
-          <li data-i18n="privacy.notice.2">Trip data, notification preferences, and theme choice are stored only in this browser's local storage on this device.</li>
-          <li data-i18n="privacy.notice.3">Nothing is transmitted to the developer or any third party. There is no analytics, tracking, or advertising in this app.</li>
-          <li data-i18n="privacy.notice.4">Local storage is used solely to run the app's own features (saving trips, remembering your theme and notification settings) — never for tracking.</li>
-          <li data-i18n="privacy.notice.5">Export, Import, and "Clear all logged stays" (Settings → Data) are the only ways your data moves off, into, or out of this device.</li>
+          <li data-i18n="privacy.notice.1">Schengen Guard Anywhere requires an account (email + password) so your trips can sync across the devices you sign in on.</li>
+          <li data-i18n="privacy.notice.2">Trip data is stored in a Supabase-hosted Postgres database, scoped to your account with Row Level Security — only you can read or write your own trips.</li>
+          <li data-i18n="privacy.notice.3">Nothing is transmitted to any third party beyond Supabase, which hosts the database on our behalf. There is no analytics, tracking, or advertising in this app.</li>
+          <li data-i18n="privacy.notice.4">Notification preferences, theme, and language choice stay local to each device — they are not synced with your account.</li>
+          <li data-i18n="privacy.notice.5">Export, Import, and "Clear all logged stays" (Settings → Data) remain available as manual, local options alongside your synced account data.</li>
         </ul>
-        <p class="card-body" data-i18n-html="privacy.notice.ios"><strong>iOS note:</strong> if you don't open the app for roughly a week or more, iOS may automatically clear locally stored website/app data as part of its normal storage-management behaviour. Export a backup periodically if you want to keep your trip history safe.</p>
+        <p class="card-body" data-i18n-html="privacy.notice.ios"><strong>Local preferences note:</strong> on iPhone/iPad, if you don't open the app for about a week or more, iOS may clear locally stored preferences like theme and language. Your trip data isn't affected — it lives in your account, not on the device.</p>
       </div>
 
       <div class="card">
         <div class="card-kicker" data-i18n="privacy.termsTitle">Terms of Use</div>
         <ul class="legal-list">
-          <li data-i18n="privacy.terms.1">Schengen Guard is provided "as is," for informational and personal record-keeping purposes only.</li>
+          <li data-i18n="privacy.terms.1">Schengen Guard Anywhere is provided "as is," for informational and personal record-keeping purposes only.</li>
           <li data-i18n="privacy.terms.2">It is not immigration, legal, or professional advice, and no warranty is made as to the accuracy, completeness, or fitness of its calculations for any particular purpose.</li>
           <li data-i18n="privacy.terms.3">You are responsible for independently verifying your compliance with the 90/180-day rule (or any other entry requirement) using official sources — the European Commission's short-stay calculator, the border authority of the country you're visiting, or a qualified immigration professional — particularly for any borderline case.</li>
           <li data-i18n="privacy.terms.4">To the fullest extent permitted by law, the developer disclaims liability for any loss or damage arising from reliance on the app's output, including missed flights, denied entry, fines, or other immigration consequences.</li>
@@ -247,9 +266,17 @@
     <div class="screen" id="tab-settings" style="display:none;">
       <h1 style="font-size:22px; padding-top:4px; margin-bottom:16px;" data-i18n="settings.heading">Settings</h1>
 
+      <div class="card">
+        <div class="card-kicker" data-i18n="settings.accountTitle">Account</div>
+        <div class="account-row">
+          <span id="signedInAs"></span>
+          <button type="button" class="link-btn" id="signOutBtn" data-i18n="settings.signOut">Sign out</button>
+        </div>
+      </div>
+
       <div class="card" id="backupCard">
         <div class="card-kicker" data-i18n="settings.backupTitle">Backup &amp; restore</div>
-        <p class="card-body" data-i18n="settings.backupBody">Trip data lives only on this device — there's no account and no server copy. Back up regularly, and before you switch phones or clear browser data.</p>
+        <p class="card-body" data-i18n="settings.backupBody">Your trips already sync to your account, so this is a supplementary local copy — useful for an offline backup or moving data between accounts, not required for normal use.</p>
         <button type="button" class="btn btn-primary btn-block" id="exportBtn" data-i18n="settings.backupBtn">Back up my trips</button>
         <button type="button" class="btn btn-secondary btn-block" id="importBtn" data-i18n="settings.restoreBtn">Restore from backup</button>
         <input type="file" id="importFile" accept="application/json" style="display:none;">
@@ -304,8 +331,7 @@
       <div class="card">
         <div class="card-kicker" data-i18n="settings.dataTitle">Data</div>
         <p class="card-body" data-i18n="settings.dataRule">Rolling 180-day window, max 90 days in Schengen — the standard short-stay rule for non-EU visitors. Not immigration advice.</p>
-        <p class="card-body" data-i18n="settings.dataOffline">This app works fully offline and never sends your trip data anywhere. If you lose this device, uninstall the app, or clear browser data without a backup, your trips can't be recovered.</p>
-        <p class="card-body" data-i18n="settings.iosDataNote">Your data lives only on this device and browser — it won't sync anywhere on its own. On iPhone/iPad, if you don't open the app for about a week or more, iOS may clear it automatically. Export a backup now and then if you want to keep your history safe.</p>
+        <p class="card-body" data-i18n="settings.dataOffline">Your trips are stored in your account, not just this device — signing in anywhere gives you access to the same data. This app needs an internet connection to save, load, or sync trips.</p>
         <button type="button" class="btn btn-secondary btn-block danger-link" id="resetBtn" data-i18n="settings.clearStays">Clear all logged stays</button>
       </div>
 
@@ -343,11 +369,11 @@
         <div class="card-kicker" data-i18n="faq.dataPrivacy.title">Data &amp; privacy</div>
         <details class="faq-item">
           <summary data-i18n="faq.dataStored.q">Where is my data stored?</summary>
-          <p class="card-body" data-i18n="faq.dataStored.a">On this device only, in your browser's local storage. There's no account and no server — nothing about your trips is ever sent anywhere.</p>
+          <p class="card-body" data-i18n="faq.dataStored.a">In a Supabase-hosted database tied to your account, so it's available wherever you sign in. Access is scoped to your account only via Row Level Security — nobody else can read or write your trips.</p>
         </details>
         <details class="faq-item">
           <summary data-i18n="faq.internet.q">Do I need an internet connection?</summary>
-          <p class="card-body" data-i18n="faq.internet.a">No. Once the app is open, it works fully offline — logging stays, checking dates, and calculating your 90/180 status all happen entirely on your device.</p>
+          <p class="card-body" data-i18n="faq.internet.a">Yes, to sign in and to save, load, or sync trips — this app talks to your account's database in real time rather than storing everything on the device. The app shell itself can load offline once cached, but trip data needs a connection.</p>
         </details>
       </div>
 
@@ -355,11 +381,11 @@
         <div class="card-kicker" data-i18n="faq.backup.title">Backup</div>
         <details class="faq-item">
           <summary data-i18n="faq.lostPhone.q">What happens if I lose my phone or clear my browser data?</summary>
-          <p class="card-body" data-i18n="faq.lostPhone.a">Your trip data is gone unless you exported a backup first. There's no server copy to restore from — that's the trade-off for keeping your data private, but it means backing up is entirely on you.</p>
+          <p class="card-body" data-i18n="faq.lostPhone.a">Nothing — your trips live in your account's database, not on the device itself. Sign in with the same account on any other device and your trips are already there.</p>
         </details>
         <details class="faq-item">
           <summary data-i18n="faq.backupHow.q">How do I back up or move my data to a new device?</summary>
-          <p class="card-body" data-i18n="faq.backupHow.a">Go to Settings → Backup &amp; restore → "Back up my trips" to download a JSON file. On your new device (or after reinstalling), use "Restore from backup" to load it back in.</p>
+          <p class="card-body" data-i18n="faq.backupHow.a">Just sign in with the same account on the new device — your trips sync automatically. If you also want a local offline copy, use Settings → Backup &amp; restore → "Back up my trips" to download a JSON file.</p>
         </details>
       </div>
 
@@ -404,10 +430,10 @@
 
       <div class="card" id="disclaimerCard">
         <div class="card-kicker" data-i18n="faq.disclaimerTitle">Terms &amp; disclaimer</div>
-        <p class="card-body" data-i18n="faq.disclaimer.notAdvice">Schengen Guard is a personal tracking tool, not immigration or legal advice.</p>
+        <p class="card-body" data-i18n="faq.disclaimer.notAdvice">Schengen Guard Anywhere is a personal tracking tool, not immigration or legal advice.</p>
         <p class="card-body" data-i18n="faq.disclaimer.verify">You're responsible for independently verifying your own compliance before you travel — the app's calculations are a best-effort aid, not a guarantee.</p>
         <p class="card-body" data-i18n="faq.disclaimer.liability">We accept no liability for overstay consequences based on the app's output.</p>
-        <p class="card-body" data-i18n="faq.disclaimer.dataLoss">Trip data lives only on this device. It is not recoverable by the app or its developer if the device is lost, the app is uninstalled, or browser data is cleared — exporting a backup is your own responsibility.</p>
+        <p class="card-body" data-i18n="faq.disclaimer.dataLoss">Trip data is stored in your account's database, so losing a device, uninstalling the app, or clearing browser data doesn't affect it — just sign in again elsewhere. If you delete your account, that data is gone; exporting a local backup first is your own responsibility.</p>
       </div>
     </div>
 
@@ -437,8 +463,8 @@
   <div class="modal-backdrop" id="firstRunModal" style="display:none;">
     <div class="card modal-card">
       <div class="card-kicker" data-i18n="firstRun.title">Before you start</div>
-      <p class="card-body" data-i18n-html="firstRun.p1">Schengen Guard is a personal trip-tracking tool, not immigration or legal advice. Its 90/180-day calculations are provided for informational purposes only, with no warranty of accuracy. Always verify borderline cases against the <a href="https://ec.europa.eu/assets/home/visa-calculator/calculator.htm" target="_blank" rel="noopener">European Commission's official short-stay calculator</a> and with the relevant border authority or consulate before you travel.</p>
-      <p class="card-body" data-i18n="firstRun.p2">All your trip data stays on this device only — nothing is sent anywhere. See Settings → Privacy &amp; Terms for details.</p>
+      <p class="card-body" data-i18n-html="firstRun.p1">Schengen Guard Anywhere is a personal trip-tracking tool, not immigration or legal advice. Its 90/180-day calculations are provided for informational purposes only, with no warranty of accuracy. Always verify borderline cases against the <a href="https://ec.europa.eu/assets/home/visa-calculator/calculator.htm" target="_blank" rel="noopener">European Commission's official short-stay calculator</a> and with the relevant border authority or consulate before you travel.</p>
+      <p class="card-body" data-i18n="firstRun.p2">Your trips sync to your account so they're available on every device you sign in on. See Settings → Privacy &amp; Terms for details.</p>
       <button type="button" class="btn btn-primary btn-block" id="firstRunAckBtn" data-i18n="firstRun.ack">I understand</button>
     </div>
   </div>

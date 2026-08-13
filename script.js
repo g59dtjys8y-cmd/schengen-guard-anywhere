@@ -1,13 +1,21 @@
-const DB_NAME = 'schengenGuardDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'trips';
+// Fill in your own Supabase project's values (Settings → API in the Supabase dashboard).
+// See README.md for the SQL to create the `trips` table and its Row Level Security policy.
+// These placeholders are a syntactically valid URL/key so the app can still boot (theme,
+// language, disclaimers, etc.) and fail gracefully on sign-in rather than crashing outright
+// if you forget to configure your own project before deploying.
+const SUPABASE_URL = 'https://your-project.supabase.co';
+const SUPABASE_KEY = 'your-anon-key';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000; // auto sign-out after 1 day of not opening the app
+
 const SCHEMA_VERSION = 1; // bump when the exported JSON trip shape changes
 
-const NOTIF_PREFS_KEY = 'schengenGuardNotifThresholds';
-const NOTIF_LAST_FIRED_KEY = 'schengenGuardNotifLastFired';
-const LAST_BACKUP_KEY = 'schengenGuardLastBackupAt';
-const BACKUP_NUDGE_DISMISSED_KEY = 'schengenGuardBackupNudgeDismissedAt';
-const DISCLAIMER_ACK_KEY = 'schengenGuardDisclaimerAcknowledged';
+const NOTIF_PREFS_KEY = 'schengenGuardAnywhereNotifThresholds';
+const NOTIF_LAST_FIRED_KEY = 'schengenGuardAnywhereNotifLastFired';
+const LAST_BACKUP_KEY = 'schengenGuardAnywhereLastBackupAt';
+const BACKUP_NUDGE_DISMISSED_KEY = 'schengenGuardAnywhereBackupNudgeDismissedAt';
+const DISCLAIMER_ACK_KEY = 'schengenGuardAnywhereDisclaimerAcknowledged';
+const LAST_ACTIVE_KEY = 'schengenGuardAnywhereLastActive';
 const RING_RADIUS = 99;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
@@ -18,6 +26,7 @@ const ALL_COUNTRIES = [
   'Slovenia','Spain','Sweden','Switzerland'
 ];
 
+let currentUser = null;
 let trips = []; // {id, start:'YYYY-MM-DD', end:'YYYY-MM-DD', label, excludedRanges:[{start,end}]}
 let calCursor = new Date(); calCursor.setDate(1);
 let pickStart = null, pickEnd = null;
@@ -35,7 +44,7 @@ function newId(){
 // real translated copy lands in a later pass, and missing keys fall back to English
 // rather than showing a blank string or a raw key).
 
-const LANG_KEY = 'schengenGuardLang';
+const LANG_KEY = 'schengenGuardAnywhereLang';
 const VALID_LANGS = ['en', 'zh', 'ja'];
 const INTL_LOCALE = { en: 'en-GB', zh: 'zh-CN', ja: 'ja-JP' };
 let currentLang = 'en';
@@ -273,88 +282,76 @@ function classifyTrip(t){
   return 'planned';
 }
 
-// --- IndexedDB storage layer (trips live only on this device) ---
+// --- Supabase storage layer (trips sync to your account, not just this device) ---
 
-let dbPromise = null;
-function openDB(){
-  if(dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject)=>{
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = ()=>{
-      const idb = req.result;
-      if(!idb.objectStoreNames.contains(STORE_NAME)){
-        idb.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-    req.onsuccess = ()=> resolve(req.result);
-    req.onerror = ()=> reject(req.error);
-  });
-  return dbPromise;
-}
-
-function withStore(mode, fn){
-  return openDB().then(idb => new Promise((resolve, reject)=>{
-    const tx = idb.transaction(STORE_NAME, mode);
-    const store = tx.objectStore(STORE_NAME);
-    const result = fn(store);
-    tx.oncomplete = ()=> resolve(result);
-    tx.onerror = ()=> reject(tx.error);
-  }));
-}
-
-function dbGetAll(){
-  return openDB().then(idb => new Promise((resolve, reject)=>{
-    const tx = idb.transaction(STORE_NAME, 'readonly');
-    const req = tx.objectStore(STORE_NAME).getAll();
-    req.onsuccess = ()=> resolve(req.result || []);
-    req.onerror = ()=> reject(req.error);
-  }));
-}
-
-function dbPut(trip){ return withStore('readwrite', store => store.put(trip)); }
-function dbDelete(id){ return withStore('readwrite', store => store.delete(id)); }
-function dbClearAll(){ return withStore('readwrite', store => store.clear()); }
-function dbPutAll(list){
-  return openDB().then(idb => new Promise((resolve, reject)=>{
-    const tx = idb.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    for(const t of list) store.put(t);
-    tx.oncomplete = ()=> resolve();
-    tx.onerror = ()=> reject(tx.error);
-  }));
-}
-
-// Load all trips from IndexedDB into the in-memory `trips` array the rest of the app reads
+// Load this user's trips from Supabase, mapping DB rows to the shape the rest of the app expects
 async function loadTrips(){
-  const rows = await dbGetAll();
-  trips = rows.map(t => ({ ...t, excludedRanges: t.excludedRanges || [] }));
+  if(!currentUser){ trips = []; return; }
+  try{
+    const { data, error } = await db.from('trips').select('*').order('start_date');
+    if(error) throw error;
+    trips = (data || []).map(row => ({
+      id: row.id, start: row.start_date, end: row.end_date, label: row.country,
+      excludedRanges: row.excluded_ranges || []
+    }));
+  }catch(e){
+    trips = [];
+  }
 }
 
+// Insert one trip into Supabase, then reload so ids/ordering stay in sync with the database
 async function insertTrip(start, end, label, excludedRanges){
-  const trip = { id: newId(), start, end, label, excludedRanges: excludedRanges || [] };
-  await dbPut(trip);
+  const { error } = await db.from('trips').insert([{
+    start_date: start, end_date: end, country: label, excluded_ranges: excludedRanges || []
+  }]);
+  if(error) throw error;
   await loadTrips();
   markTripsChanged();
 }
 
+// Update one existing trip's dates/country/exclusions, then reload
 async function updateTrip(id, start, end, label, excludedRanges){
   const existing = trips.find(t => t.id === id);
-  const trip = { id, start, end, label, excludedRanges: excludedRanges || (existing && existing.excludedRanges) || [] };
-  await dbPut(trip);
+  const { error } = await db.from('trips').update({
+    start_date: start, end_date: end, country: label,
+    excluded_ranges: excludedRanges || (existing && existing.excludedRanges) || []
+  }).eq('id', id);
+  if(error) throw error;
   await loadTrips();
   markTripsChanged();
 }
 
+// Delete one trip by its database id
 async function deleteTrip(id){
-  await dbDelete(id);
+  const { error } = await db.from('trips').delete().eq('id', id);
+  if(error) throw error;
   await loadTrips();
   markTripsChanged();
 }
 
+// Delete every trip belonging to the current user
 async function deleteAllTrips(){
-  await dbClearAll();
+  if(!currentUser) return;
+  const { error } = await db.from('trips').delete().eq('user_id', currentUser.id);
+  if(error) throw error;
   trips = [];
   markTripsChanged();
+}
+
+function showSignedIn(){
+  localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+  document.getElementById('authPanel').style.display = 'none';
+  document.getElementById('appBody').style.display = 'block';
+  document.getElementById('tabbar').style.display = 'flex';
+  document.getElementById('signedInAs').textContent = t('auth.signedInAs', { email: currentUser.email });
+}
+
+function showSignedOut(){
+  localStorage.removeItem(LAST_ACTIVE_KEY);
+  document.getElementById('authPanel').style.display = 'block';
+  document.getElementById('appBody').style.display = 'none';
+  document.getElementById('tabbar').style.display = 'none';
+  clearAppBadge();
 }
 
 // Home-screen app icon badge (installed PWA only) — days you can still stay in the
@@ -1003,7 +1000,7 @@ document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('printTripsBtn').addEventListener('click', ()=>{
-  let html = `<h1>Schengen Guard — trip history</h1><p>Generated ${fmt(todayISO())}</p>`;
+  let html = `<h1>Schengen Guard Anywhere — trip history</h1><p>Generated ${fmt(todayISO())}</p>`;
   html += '<table><thead><tr><th>Country</th><th>Entry</th><th>Exit</th><th>Days</th><th>Excluded days</th><th>Status</th></tr></thead><tbody>';
   for(const t of sortedTrips()){
     const days = Math.round((toDate(t.end) - toDate(t.start))/86400000) + 1;
@@ -1135,7 +1132,7 @@ document.getElementById('breakdownModal').addEventListener('click', (e)=>{
   if(e.target.id === 'breakdownModal') document.getElementById('breakdownModal').style.display = 'none';
 });
 
-// --- Backup / restore (the only mechanism for keeping trip data — there is no account) ---
+// --- Backup / restore (supplementary local copy — your account is the primary store) ---
 
 function markTripsChanged(){
   // Any edit re-opens the nudge on the next render unless a fresh-enough backup already covers it.
@@ -1146,17 +1143,12 @@ function renderBackupNudgeText(){
   document.getElementById('backupNudgeText').innerHTML = t('backupNudge.text', { link: linkHtml });
 }
 
+// No-op here (unlike the local-only sibling app): trips already live in your account's
+// database, so there's nothing urgent to nudge about. The banner element stays in the
+// DOM but is never shown — Settings → Backup & restore is still there as an optional,
+// supplementary local copy.
 function renderBackupNudge(){
-  const banner = document.getElementById('backupNudge');
-  if(trips.length === 0){ banner.style.display = 'none'; return; }
-
-  const lastBackup = Number(localStorage.getItem(LAST_BACKUP_KEY) || 0);
-  const dismissedAt = Number(localStorage.getItem(BACKUP_NUDGE_DISMISSED_KEY) || 0);
-  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  const needsBackup = (Date.now() - lastBackup) > SEVEN_DAYS_MS;
-  const recentlyDismissed = (Date.now() - dismissedAt) < SEVEN_DAYS_MS;
-
-  banner.style.display = (needsBackup && !recentlyDismissed) ? 'flex' : 'none';
+  document.getElementById('backupNudge').style.display = 'none';
 }
 
 document.getElementById('backupNudgeDismiss').addEventListener('click', ()=>{
@@ -1253,10 +1245,18 @@ document.getElementById('importFile').addEventListener('change', async (e)=>{
 async function applyImport(mode){
   if(!pendingImportTrips) return;
   if(mode === 'replace'){
-    await dbClearAll();
-    await dbPutAll(pendingImportTrips);
-  } else {
-    await dbPutAll(pendingImportTrips);
+    await deleteAllTrips();
+  }
+  // Imported ids may not be valid Postgres UUIDs (e.g. a backup from the local-only
+  // sibling app) — always insert as new rows and let the database assign fresh ids.
+  const rows = pendingImportTrips.map(it => ({
+    start_date: it.start, end_date: it.end, country: it.label, excluded_ranges: it.excludedRanges || []
+  }));
+  const { error } = await db.from('trips').insert(rows);
+  if(error){
+    const errEl = document.getElementById('backupError');
+    errEl.textContent = t('trips.saveError');
+    errEl.style.display = 'block';
   }
   pendingImportTrips = null;
   document.getElementById('importModal').style.display = 'none';
@@ -1272,7 +1272,7 @@ document.getElementById('importCancelBtn').addEventListener('click', ()=>{
 });
 
 // --- Theme ---
-const THEME_KEY = 'schengenGuardTheme';
+const THEME_KEY = 'schengenGuardAnywhereTheme';
 const THEME_COLORS = { light:'#f3f2f2', dark:'#1b1918' };
 const darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -1342,7 +1342,7 @@ function checkDayRollover(){
   lastKnownDay = today;
   document.getElementById('todayTag').textContent = fmt(today);
   if(wasFollowingToday) refInput.value = today;
-  render();
+  if(currentUser) render();
 }
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible') checkDayRollover();
@@ -1358,6 +1358,59 @@ function maybeShowFirstRunModal(){
 document.getElementById('firstRunAckBtn').addEventListener('click', ()=>{
   localStorage.setItem(DISCLAIMER_ACK_KEY, 'true');
   document.getElementById('firstRunModal').style.display = 'none';
+});
+
+// --- Authentication ---
+
+document.getElementById('signUpBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  errEl.style.display = 'none';
+  if(!email || password.length < 6){
+    errEl.textContent = t('auth.emailPasswordRequired');
+    errEl.style.display = 'block';
+    return;
+  }
+  const { data, error } = await db.auth.signUp({ email, password });
+  if(error){
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  if(data.user){
+    currentUser = data.user;
+    await loadTrips();
+    showSignedIn();
+    render();
+  }
+});
+
+document.getElementById('signInBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  errEl.style.display = 'none';
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
+  if(error){
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  currentUser = data.user;
+  await loadTrips();
+  showSignedIn();
+  render();
+});
+
+document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+  await db.auth.signOut();
+  currentUser = null;
+  trips = [];
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authError').style.display = 'none';
+  showSignedOut();
 });
 
 (async function init(){
@@ -1386,8 +1439,22 @@ document.getElementById('firstRunAckBtn').addEventListener('click', ()=>{
   initNotifCheckboxes();
   updateLastBackupNote();
 
-  await loadTrips();
-  render();
+  const { data: { session } } = await db.auth.getSession();
+  if(session && session.user){
+    const lastActive = Number(localStorage.getItem(LAST_ACTIVE_KEY) || 0);
+    const inactiveFor = Date.now() - lastActive;
+    if(lastActive && inactiveFor > INACTIVITY_LIMIT_MS){
+      await db.auth.signOut();
+      showSignedOut();
+      return;
+    }
+    currentUser = session.user;
+    await loadTrips();
+    showSignedIn();
+    render();
+  } else {
+    showSignedOut();
+  }
 })();
 
 if('serviceWorker' in navigator){

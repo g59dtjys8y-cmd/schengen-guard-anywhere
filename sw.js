@@ -1,4 +1,4 @@
-const CACHE_NAME = 'schengen-guard-v2';
+const CACHE_NAME = 'schengen-guard-anywhere-v1';
 const CORE_FILES = [
   './', 'index.html', 'style.css', 'script.js', 'manifest.json', 'icon-192.png', 'icon-512.png',
   'fonts/source-serif-4/source-serif-4-400.woff2', 'fonts/source-serif-4/source-serif-4-400-italic.woff2'
@@ -21,8 +21,8 @@ self.addEventListener('activate', (event) => {
 });
 
 // Network-first: always try to get the freshest version of the app itself,
-// falling back to the cached copy only if offline. Trip data never goes over
-// the network — it lives entirely in this device's IndexedDB.
+// falling back to the cached copy only if offline. Trip data is synced to
+// Supabase over the network — the app shell above is the only thing precached.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(

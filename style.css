@@ -309,6 +309,14 @@ a:hover{text-decoration:underline;}
 .suggestion-btn:hover{border-color:var(--color-accent);}
 .suggestion-btn strong{color:var(--color-accent-700);}
 
+/* — auth (sign in / create account) — */
+#authPanel{max-width:480px;margin:0 auto;padding:0 20px;}
+#authPanel .card{gap:14px;}
+#authPanel h2{font-family:var(--font-heading);font-size:20px;font-weight:600;margin:0;}
+#authPanel .desc{font-size:13.5px;color:var(--color-neutral-700);margin:0 0 4px;}
+#authPanel .field + .field{margin-top:2px;}
+#authPanel .btn + .btn{margin-top:0;}
+
 /* — arc ring (home) — */
 .ring-wrap{position:relative;width:230px;height:230px;margin:8px auto 0;}
 .ring-wrap svg{transform:rotate(-90deg);}
