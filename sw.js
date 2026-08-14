@@ -25,6 +25,10 @@ self.addEventListener('activate', (event) => {
 // Supabase over the network — the app shell above is the only thing precached.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // Never cache authenticated requests (Supabase's own auth/REST calls carry an
+  // Authorization header). Caching is keyed by URL, not by who's signed in, so on a
+  // shared device a cache hit could otherwise hand one user's trip data to the next.
+  if (event.request.headers.has('Authorization')) return;
   event.respondWith(
     fetch(event.request)
       .then((response) => {
