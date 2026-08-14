@@ -189,7 +189,13 @@
       </div>
 
       <div class="card safe-trip-checker" id="checkerCard">
-        <div class="card-kicker" data-i18n="trips.checkerTitle">Safe Trip Checker</div>
+        <div class="qc-title-row">
+          <span class="qc-title-label">
+            <span class="qc-title-black" data-i18n="trips.checkerTitleWord1">Safe</span>
+            <span class="qc-title-blue" data-i18n="trips.checkerTitleWord2">Trip Checker</span>
+          </span>
+          <span class="qc-title-rule"></span>
+        </div>
         <div class="field" style="margin-top:2px;">
           <label for="checkerCountry" data-i18n="trips.country">Country</label>
           <select class="input" id="checkerCountry"></select>
@@ -399,17 +405,6 @@
         <span class="tag tag-neutral" data-i18n="home.view">View →</span>
       </div>
 
-      <div class="card">
-        <div class="qc-title-row">
-          <span class="qc-title-label"><span class="qc-title-black" data-i18n="settings.accountTitle">Account</span></span>
-          <span class="qc-title-rule"></span>
-        </div>
-        <div class="account-row">
-          <span id="signedInAs"></span>
-          <button type="button" class="link-btn" id="signOutBtn" data-i18n="settings.signOut">Sign out</button>
-        </div>
-      </div>
-
       <div class="card" id="backupCard">
         <div class="qc-title-row">
           <span class="qc-title-label">
@@ -439,14 +434,25 @@
         <button type="button" class="btn btn-secondary btn-block" id="printTripsBtn" data-i18n="settings.printBtn">Print / save as PDF</button>
       </div>
 
-      <div class="card">
-        <div class="qc-title-row">
-          <span class="qc-title-label"><span class="qc-title-black" data-i18n="settings.dataTitle">Data</span></span>
+      <details class="card">
+        <summary class="qc-title-row">
+          <span class="qc-title-label"><span class="qc-title-black" data-i18n="settings.clearStays">Clear all logged stays</span></span>
           <span class="qc-title-rule"></span>
-        </div>
+        </summary>
         <p class="card-body" data-i18n="settings.dataRule">Rolling 180-day window, max 90 days in Schengen — the standard short-stay rule for non-EU visitors. Not immigration advice.</p>
         <p class="card-body" data-i18n="settings.dataOffline">Your trips are stored in your account, not just this device — signing in anywhere gives you access to the same data. This app needs an internet connection to save, load, or sync trips.</p>
         <button type="button" class="btn btn-secondary btn-block danger-link" id="resetBtn" data-i18n="settings.clearStays">Clear all logged stays</button>
+      </details>
+
+      <div class="card">
+        <div class="qc-title-row">
+          <span class="qc-title-label"><span class="qc-title-black" data-i18n="settings.accountTitle">Account</span></span>
+          <span class="qc-title-rule"></span>
+        </div>
+        <div class="account-row">
+          <span id="signedInAs"></span>
+          <button type="button" class="link-btn" id="signOutBtn" data-i18n="settings.signOut">Sign out</button>
+        </div>
       </div>
 
       <div class="card elev-sm card-row" id="privacyCard" style="cursor:pointer;">
