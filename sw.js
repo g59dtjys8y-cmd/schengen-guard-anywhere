@@ -1,4 +1,4 @@
-const CACHE_NAME = 'schengen-guard-anywhere-v3';
+const CACHE_NAME = 'schengen-guard-anywhere-v4';
 const CORE_FILES = [
   './', 'index.html', 'style.css', 'script.js', 'manifest.json', 'icon-192.png', 'icon-512.png',
   'fonts/source-serif-4/source-serif-4-400.woff2', 'fonts/source-serif-4/source-serif-4-400-italic.woff2'
@@ -30,7 +30,7 @@ self.addEventListener('fetch', (event) => {
   // shared device a cache hit could otherwise hand one user's trip data to the next.
   if (event.request.headers.has('Authorization')) return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-store' })
       .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
