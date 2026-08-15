@@ -62,7 +62,8 @@
 
   "trips.heading": "Your trips",
   "trips.addAria": "Add a trip",
-  "trips.checkerTitle": "Safe Trip Checker",
+  "trips.checkerTitleWord1": "Safe",
+  "trips.checkerTitleWord2": "Trip Checker",
   "trips.country": "Country",
   "trips.entry": "Entry",
   "trips.exit": "Exit",
@@ -152,7 +153,6 @@
   "settings.notif7": "7 days left",
   "settings.notif3": "3 days left",
   "settings.notifNote": "Fires once per threshold per rolling window, based on your logged and planned trips. Requires notification permission and the app open in a tab.",
-  "settings.dataTitle": "Data",
   "settings.dataRule": "Rolling 180-day window, max 90 days in Schengen — the standard short-stay rule for non-EU visitors. Not immigration advice.",
   "settings.dataOffline": "Your trips are stored in your account, not just this device — signing in anywhere gives you access to the same data. This app needs an internet connection to save, load, or sync trips.",
   "settings.clearStays": "Clear all logged stays",
