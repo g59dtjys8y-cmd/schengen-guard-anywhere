@@ -94,13 +94,7 @@ let pendingExcludedRanges = [];
 let pickingExclusion = false;
 let exclPickStart = null, exclPickEnd = null;
 let editingExclusionIndex = null;
-let checkerPendingExcludedRanges = [];
-let checkerPickingExclusion = false;
-let checkerEditingExclusionIndex = null;
-let checkerCalCursor = new Date(); checkerCalCursor.setDate(1);
-let checkerPickStart = null, checkerPickEnd = null;
-let checkerExclPickStart = null, checkerExclPickEnd = null;
-let checkerMode = 'month'; // 'month' | 'year' | 'history' — which view the Calendar card shows
+let checkerMode = 'year'; // 'year' | 'history' — which view the Calendar card shows
 let checkerYearCursor = new Date().getFullYear();
 
 function newId(){
@@ -491,8 +485,12 @@ document.getElementById('countriesCard').addEventListener('click', ()=>{
 });
 document.getElementById('countriesBackBtn').addEventListener('click', ()=> switchTab('settings'));
 document.getElementById('homeAddTripBtn').addEventListener('click', ()=>{
-  switchTab('calendar');
-  document.getElementById('checkerEntry').focus();
+  stopEditTrip();
+  switchTab('editStay');
+});
+document.getElementById('tripListAddBtn').addEventListener('click', ()=>{
+  stopEditTrip();
+  switchTab('editStay');
 });
 document.getElementById('faqCard').addEventListener('click', ()=> switchTab('faq'));
 document.getElementById('faqBackBtn').addEventListener('click', ()=> switchTab('settings'));
@@ -587,9 +585,7 @@ function render(){
   renderNextTrip();
   renderCountriesCard();
   renderCalendar();
-  renderCheckerCalendar();
   renderCheckerMode();
-  updateChecker();
   updateAppBadge();
   checkNotifications();
   renderBackupNudge();
@@ -908,19 +904,18 @@ document.getElementById('pcDate').addEventListener('change', renderPassportContr
 
 // --- Safe Trip Checker (Trips tab) ---
 
-function updateChecker(){
-  const msgEl = document.getElementById('checkerMsg');
-  const errEl = document.getElementById('checkerError');
-  const saveBtn = document.getElementById('checkerSaveBtn');
-  const breakdownBtn = document.getElementById('checkerBreakdownBtn');
-  const suggestionsEl = document.getElementById('checkerSuggestions');
-  const start = document.getElementById('checkerEntry').value;
-  const end = document.getElementById('checkerExit').value;
+function updateEditStayCompliance(){
+  const msgEl = document.getElementById('editStayMsg');
+  const errEl = document.getElementById('formError');
+  const saveBtn = document.getElementById('addTripBtn');
+  const breakdownBtn = document.getElementById('editStayBreakdownBtn');
+  const suggestionsEl = document.getElementById('editStaySuggestions');
+  const start = pickStart;
+  const end = pickEnd;
   errEl.style.display = 'none';
   breakdownBtn.style.display = 'none';
   suggestionsEl.style.display = 'none';
   suggestionsEl.innerHTML = '';
-  renderCheckerExclusionSection();
 
   if(!start || !end){
     msgEl.textContent = 'Pick an entry and exit date to check compliance before you save it.';
@@ -936,12 +931,13 @@ function updateChecker(){
   }
 
   const days = Math.round((toDate(end) - toDate(start)) / 86400000) + 1;
-  const hypothetical = trips.concat([{ start, end, label: '__checker__', excludedRanges: checkerPendingExcludedRanges }]);
+  const baseline = trips.filter(t => t.id !== editingTripId);
+  const hypothetical = baseline.concat([{ start, end, label: '__editStay__', excludedRanges: pendingExcludedRanges }]);
   const overstay = tripOverstayInfo(hypothetical, { start, end }, 90);
   breakdownBtn.style.display = 'inline-flex';
   if(overstay){
     msgEl.innerHTML = `${days}-day stay — <strong style="color:var(--color-accent-2-700)">would breach your limit</strong> on ${fmt(overstay.date)} (${overstay.used} of 90 used).`;
-    const suggestion = computeTripSuggestion(hypothetical, trips, start, end, 90);
+    const suggestion = computeTripSuggestion(hypothetical, baseline, start, end, 90);
     if(suggestion.suggestions.length){
       suggestionsEl.style.display = 'grid';
       for(const s of suggestion.suggestions){
@@ -950,15 +946,15 @@ function updateChecker(){
         btn.className = 'suggestion-btn';
         btn.innerHTML = s.label;
         btn.addEventListener('click', ()=>{
-          checkerPickStart = s.start; checkerPickEnd = s.end;
-          document.getElementById('checkerEntry').value = s.start;
-          document.getElementById('checkerExit').value = s.end;
-          document.getElementById('checkerPickStartLbl').textContent = `Entry: ${fmt(s.start)}`;
-          document.getElementById('checkerPickEndLbl').textContent = `Exit: ${fmt(s.end)}`;
-          checkerPendingExcludedRanges = checkerPendingExcludedRanges.filter(r => r.start >= s.start && r.end <= s.end);
-          checkerCalCursor = new Date(toDate(s.start)); checkerCalCursor.setDate(1);
-          renderCheckerCalendar();
-          updateChecker();
+          pickStart = s.start; pickEnd = s.end;
+          document.getElementById('tripStart').value = s.start;
+          document.getElementById('tripEnd').value = s.end;
+          document.getElementById('pickStartLbl').textContent = `Entry: ${fmt(s.start)}`;
+          document.getElementById('pickEndLbl').textContent = `Exit: ${fmt(s.end)}`;
+          pendingExcludedRanges = pendingExcludedRanges.filter(r => r.start >= s.start && r.end <= s.end);
+          calCursor = new Date(toDate(s.start)); calCursor.setDate(1);
+          renderCalendar();
+          renderExclusionSection();
         });
         suggestionsEl.appendChild(btn);
       }
@@ -970,99 +966,9 @@ function updateChecker(){
   saveBtn.disabled = false;
 }
 
-// --- Checker's own mini calendar + side-trip exclusion (tap-based, mirrors the Calendar tab) ---
-
-function renderCheckerCalendar(){
-  const label = document.getElementById('checkerCalMonthLabel');
-  label.textContent = checkerCalCursor.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
-  document.getElementById('checkerPrevMonth').textContent = '← ' + adjacentMonthLabel(checkerCalCursor, -1);
-  document.getElementById('checkerNextMonth').textContent = adjacentMonthLabel(checkerCalCursor, 1) + ' →';
-  const grid = document.getElementById('checkerCalGrid');
-  grid.innerHTML = '';
-
-  const dowRow = document.createElement('div');
-  dowRow.className = 'cal-dow-row';
-  ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>{
-    const el = document.createElement('div');
-    el.className='cal-dow'; el.textContent=d;
-    dowRow.appendChild(el);
-  });
-  grid.appendChild(dowRow);
-
-  const year = checkerCalCursor.getFullYear(), month = checkerCalCursor.getMonth();
-  const firstDay = new Date(year, month, 1);
-  let startOffset = firstDay.getDay() - 1; if(startOffset < 0) startOffset = 6;
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const covered = coveredDates(trips);
-  const plannedSet = coveredDates(trips.filter(t=>classifyTrip(t)==='planned'));
-  const excluded = excludedDatesSet(trips);
-  const today = todayISO();
-
-  const slots = [];
-  for(let i=0;i<startOffset;i++) slots.push(null);
-  for(let day=1; day<=daysInMonth; day++) slots.push(year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0'));
-  while(slots.length % 7 !== 0) slots.push(null);
-
-  for(let w=0; w<slots.length; w+=7){
-    const weekIsos = slots.slice(w, w+7);
-    const weekEl = document.createElement('div');
-    weekEl.className = 'cal-week';
-    weekEl.insertAdjacentHTML('beforeend', renderRibbonRow(weekIsos, trips));
-
-    const dayRow = document.createElement('div');
-    dayRow.className = 'cal-day-row';
-    for(const iso of weekIsos){
-      if(!iso){
-        const pad = document.createElement('div'); pad.className='cal-day pad';
-        dayRow.appendChild(pad);
-        continue;
-      }
-      const day = Number(iso.slice(-2));
-      const el = document.createElement('div');
-      el.className = 'cal-day';
-      if(covered.has(iso)){
-        el.classList.add('in-trip');
-        if(plannedSet.has(iso)) el.classList.add('planned');
-      } else if(excluded.has(iso)){
-        el.classList.add('excluded');
-      }
-      if(checkerPendingExcludedRanges.some(r => iso >= r.start && iso <= r.end)) el.classList.add('excluded');
-      if(iso === today) el.classList.add('today');
-      const used = usedDaysInWindow(trips, iso);
-      const remaining = 90 - used;
-      if(used > 90) el.classList.add('overstay');
-      if(checkerPickStart && iso === checkerPickStart) el.classList.add('pick-start');
-      if(checkerPickEnd && iso === checkerPickEnd) el.classList.add('pick-end');
-      if(checkerPickStart && checkerPickEnd && iso > checkerPickStart && iso < checkerPickEnd) el.classList.add('pick-range');
-      if(checkerPickingExclusion){
-        if(!checkerPickStart || !checkerPickEnd || iso < checkerPickStart || iso > checkerPickEnd){
-          el.classList.add('excl-disabled');
-        } else if(checkerExclPickStart && (iso === checkerExclPickStart || (checkerExclPickEnd && iso >= checkerExclPickStart && iso <= checkerExclPickEnd))){
-          el.classList.add('selecting');
-        }
-      }
-      el.innerHTML = `<span class="daynum">${day}</span><span class="rem">${used>90 ? '−'+(used-90) : remaining}</span>`;
-      el.addEventListener('click', ()=>checkerHandlePick(iso));
-      dayRow.appendChild(el);
-    }
-    weekEl.appendChild(dayRow);
-    grid.appendChild(weekEl);
-  }
-}
-
-document.getElementById('checkerPrevMonth').addEventListener('click', ()=>{
-  checkerCalCursor.setMonth(checkerCalCursor.getMonth()-1);
-  renderCheckerCalendar();
-});
-document.getElementById('checkerNextMonth').addEventListener('click', ()=>{
-  checkerCalCursor.setMonth(checkerCalCursor.getMonth()+1);
-  renderCheckerCalendar();
-});
-
-// --- Calendar card mode toggle: Month (the picker above) / Year / History ---
+// --- Calendar card mode toggle: Year / History ---
 
 function renderCheckerMode(){
-  document.getElementById('checkerMonthView').style.display = checkerMode === 'month' ? 'block' : 'none';
   document.getElementById('checkerYearView').style.display = checkerMode === 'year' ? 'block' : 'none';
   document.getElementById('checkerHistoryView').style.display = checkerMode === 'history' ? 'block' : 'none';
   document.querySelectorAll('#checkerModeToggle button').forEach(btn=>{
@@ -1126,10 +1032,9 @@ function renderYearView(){
   document.querySelectorAll('#checkerYearGrid .mini-month').forEach(el=>{
     el.addEventListener('click', ()=>{
       const m = Number(el.getAttribute('data-month'));
-      checkerCalCursor = new Date(year, m, 1);
-      checkerMode = 'month';
-      renderCheckerMode();
-      renderCheckerCalendar();
+      const lastDay = new Date(year, m+1, 0).getDate();
+      const endIso = year+'-'+String(m+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+      openBreakdown(trips, endIso);
     });
   });
 }
@@ -1318,190 +1223,6 @@ document.getElementById('yearRecapModal').addEventListener('click', (e)=>{
   if(e.target.id === 'yearRecapModal') document.getElementById('yearRecapModal').style.display = 'none';
 });
 
-function checkerHandlePick(iso){
-  if(checkerPickingExclusion){
-    checkerHandleExclusionPick(iso);
-    return;
-  }
-  if(!checkerPickStart || (checkerPickStart && checkerPickEnd)){
-    checkerPickStart = iso; checkerPickEnd = null;
-    checkerPendingExcludedRanges = []; // range is changing — old side trips may no longer make sense
-  } else {
-    if(iso >= checkerPickStart) checkerPickEnd = iso;
-    else { checkerPickEnd = checkerPickStart; checkerPickStart = iso; }
-  }
-  document.getElementById('checkerEntry').value = checkerPickStart || '';
-  document.getElementById('checkerExit').value = checkerPickEnd || '';
-  document.getElementById('checkerPickStartLbl').textContent = `Entry: ${checkerPickStart ? fmt(checkerPickStart) : '—'}`;
-  document.getElementById('checkerPickEndLbl').textContent = `Exit: ${checkerPickEnd ? fmt(checkerPickEnd) : '—'}`;
-  renderCheckerCalendar();
-  updateChecker();
-}
-
-function checkerHandleExclusionPick(iso){
-  if(!checkerPickStart || !checkerPickEnd || iso < checkerPickStart || iso > checkerPickEnd) return;
-  if(!checkerExclPickStart || (checkerExclPickStart && checkerExclPickEnd)){
-    checkerExclPickStart = iso; checkerExclPickEnd = null;
-  } else {
-    if(iso >= checkerExclPickStart) checkerExclPickEnd = iso;
-    else { checkerExclPickEnd = checkerExclPickStart; checkerExclPickStart = iso; }
-  }
-  document.getElementById('checkerExclusionError').style.display = 'none';
-  updateCheckerExclusionPickLabels();
-  renderCheckerCalendar();
-}
-
-function updateCheckerExclusionPickLabels(){
-  document.getElementById('checkerExclPickStartLbl').textContent = `From: ${checkerExclPickStart ? fmt(checkerExclPickStart) : '—'}`;
-  document.getElementById('checkerExclPickEndLbl').textContent = `To: ${checkerExclPickEnd ? fmt(checkerExclPickEnd) : '—'}`;
-}
-
-function renderCheckerExclusionSection(){
-  const start = document.getElementById('checkerEntry').value;
-  const end = document.getElementById('checkerExit').value;
-  const section = document.getElementById('checkerExclusionSection');
-  if(!start || !end || end < start){
-    section.style.display = 'none';
-    checkerPickingExclusion = false; checkerEditingExclusionIndex = null;
-    renderCheckerExclusionList();
-    return;
-  }
-  section.style.display = 'block';
-  document.getElementById('checkerExclusionNote').textContent = `Left and came back during this stay — like a UK leg? Add the dates below (must fall within ${fmt(start)}–${fmt(end)}) and they won't count toward your 90-day limit.`;
-
-  const tooShort = start === end;
-  if(tooShort){
-    checkerPickingExclusion = false; checkerEditingExclusionIndex = null;
-  }
-  document.getElementById('checkerMarkSideTripBtn').style.display = !tooShort ? 'block' : 'none';
-  document.getElementById('checkerExclusionTooShort').style.display = tooShort ? 'block' : 'none';
-  document.getElementById('checkerExclusionPicker').style.display = (!tooShort && checkerPickingExclusion) ? 'block' : 'none';
-  document.getElementById('checkerAddExclusionBtn').textContent = checkerEditingExclusionIndex !== null ? 'Save changes' : 'Add side trip';
-
-  updateCheckerExclusionPickLabels();
-  renderCheckerExclusionList();
-}
-
-function renderCheckerExclusionList(){
-  const listEl = document.getElementById('checkerExclusionList');
-  listEl.innerHTML = '';
-  checkerPendingExcludedRanges.forEach((r, idx)=>{
-    const days = Math.round((toDate(r.end) - toDate(r.start)) / 86400000) + 1;
-    const item = document.createElement('div');
-    item.className = 'exclusion-item';
-    item.innerHTML = `<span>${fmt(r.start)} – ${fmt(r.end)} (${dayCount(days)})</span>`;
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'link-btn';
-    editBtn.textContent = 'Edit';
-    editBtn.addEventListener('click', ()=>{
-      checkerEditingExclusionIndex = idx;
-      checkerPickingExclusion = true;
-      checkerExclPickStart = r.start; checkerExclPickEnd = r.end;
-      document.getElementById('checkerExclusionError').style.display = 'none';
-      renderCheckerExclusionSection();
-      renderCheckerCalendar();
-    });
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'link-btn danger-link';
-    removeBtn.textContent = 'Remove';
-    removeBtn.addEventListener('click', ()=>{
-      checkerPendingExcludedRanges.splice(idx, 1);
-      if(checkerEditingExclusionIndex === idx){
-        checkerPickingExclusion = false; checkerExclPickStart = null; checkerExclPickEnd = null; checkerEditingExclusionIndex = null;
-      }
-      renderCheckerExclusionSection();
-      renderCheckerCalendar();
-      updateChecker();
-    });
-    const actions = document.createElement('div');
-    actions.className = 'exclusion-item-actions';
-    actions.appendChild(editBtn);
-    actions.appendChild(removeBtn);
-    item.appendChild(actions);
-    listEl.appendChild(item);
-  });
-}
-
-document.getElementById('checkerMarkSideTripBtn').addEventListener('click', ()=>{
-  checkerPickingExclusion = true;
-  checkerExclPickStart = null; checkerExclPickEnd = null; checkerEditingExclusionIndex = null;
-  document.getElementById('checkerExclusionError').style.display = 'none';
-  renderCheckerExclusionSection();
-  renderCheckerCalendar();
-});
-
-document.getElementById('checkerCancelExclusionBtn').addEventListener('click', ()=>{
-  checkerPickingExclusion = false;
-  checkerExclPickStart = null; checkerExclPickEnd = null; checkerEditingExclusionIndex = null;
-  document.getElementById('checkerExclusionError').style.display = 'none';
-  renderCheckerExclusionSection();
-  renderCheckerCalendar();
-});
-
-document.getElementById('checkerAddExclusionBtn').addEventListener('click', ()=>{
-  const errEl = document.getElementById('checkerExclusionError');
-  errEl.style.display = 'none';
-  if(!checkerExclPickStart || !checkerExclPickEnd){
-    errEl.textContent = 'Tap the first and last day of the side trip on the calendar.';
-    errEl.style.display = 'block';
-    return;
-  }
-  const overlaps = checkerPendingExcludedRanges.some((r, idx) => idx !== checkerEditingExclusionIndex && checkerExclPickStart <= r.end && checkerExclPickEnd >= r.start);
-  if(overlaps){
-    errEl.textContent = 'That range overlaps a side trip you already added.';
-    errEl.style.display = 'block';
-    return;
-  }
-  if(checkerEditingExclusionIndex !== null){
-    checkerPendingExcludedRanges[checkerEditingExclusionIndex] = { start: checkerExclPickStart, end: checkerExclPickEnd };
-  } else {
-    checkerPendingExcludedRanges.push({ start: checkerExclPickStart, end: checkerExclPickEnd });
-  }
-  checkerPendingExcludedRanges.sort((a,b)=> a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
-  checkerPickingExclusion = false;
-  checkerExclPickStart = null; checkerExclPickEnd = null; checkerEditingExclusionIndex = null;
-  renderCheckerExclusionSection();
-  renderCheckerCalendar();
-  updateChecker();
-});
-
-document.getElementById('checkerSaveBtn').addEventListener('click', async ()=>{
-  const label = document.getElementById('checkerCountry').value;
-  const start = document.getElementById('checkerEntry').value;
-  const end = document.getElementById('checkerExit').value;
-  const note = document.getElementById('checkerNote').value.trim();
-  const errEl = document.getElementById('checkerError');
-  errEl.style.display = 'none';
-  if(!start || !end || end < start) return;
-
-  const overlapping = trips.find(ot => start <= ot.end && end >= ot.start);
-  if(overlapping){
-    const proceed = confirm(`This overlaps with your logged stay in ${overlapping.label} (${fmt(overlapping.start)} – ${fmt(overlapping.end)}). Save it anyway?`);
-    if(!proceed) return;
-  }
-  try{
-    await insertTrip(start, end, label, checkerPendingExcludedRanges, note);
-  }catch(e){
-    errEl.textContent = 'Could not save that stay — please try again.';
-    errEl.style.display = 'block';
-    return;
-  }
-  checkerPickStart = null; checkerPickEnd = null;
-  document.getElementById('checkerEntry').value = '';
-  document.getElementById('checkerExit').value = '';
-  document.getElementById('checkerNote').value = '';
-  document.getElementById('checkerPickStartLbl').textContent = 'Entry: —';
-  document.getElementById('checkerPickEndLbl').textContent = 'Exit: —';
-  checkerPendingExcludedRanges = [];
-  checkerPickingExclusion = false;
-  checkerExclPickStart = null; checkerExclPickEnd = null;
-  checkerEditingExclusionIndex = null;
-  renderCheckerCalendar();
-  render();
-});
-
 // --- Calendar tab (log/edit a stay by tapping dates) ---
 
 function renderCalendar(){
@@ -1614,7 +1335,7 @@ function stopEditTrip(){
   pickStart = null; pickEnd = null;
   pendingExcludedRanges = [];
   pickingExclusion = false; exclPickStart = null; exclPickEnd = null; editingExclusionIndex = null;
-  document.getElementById('tripLabel').value = '';
+  document.getElementById('tripLabel').value = 'Spain';
   document.getElementById('tripStart').value = '';
   document.getElementById('tripEnd').value = '';
   document.getElementById('tripNote').value = '';
@@ -1635,6 +1356,7 @@ function renderExclusionSection(){
   if(!pickStart || !pickEnd){
     section.style.display = 'none';
     pickingExclusion = false; exclPickStart = null; exclPickEnd = null; editingExclusionIndex = null;
+    updateEditStayCompliance();
     return;
   }
   section.style.display = 'block';
@@ -1650,6 +1372,7 @@ function renderExclusionSection(){
   document.getElementById('addExclusionBtn').textContent = editingExclusionIndex !== null ? 'Save changes' : 'Add side trip';
   updateExclusionPickLabels();
   renderExclusionList();
+  updateEditStayCompliance();
 }
 
 function updateExclusionPickLabels(){
@@ -1824,7 +1547,7 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   }
   stopEditTrip();
   render();
-  if(wasEditing) switchTab('triplist');
+  switchTab('triplist');
 });
 
 document.getElementById('refDate').addEventListener('change', render);
@@ -2011,12 +1734,11 @@ document.getElementById('homeBreakdownBtn').addEventListener('click', ()=>{
   const refISO = document.getElementById('refDate').value || todayISO();
   openBreakdown(trips, refISO);
 });
-document.getElementById('checkerBreakdownBtn').addEventListener('click', ()=>{
-  const start = document.getElementById('checkerEntry').value;
-  const end = document.getElementById('checkerExit').value;
-  if(!start || !end || end < start) return;
-  const label = document.getElementById('checkerCountry').value;
-  openBreakdown(trips.concat([{ start, end, label }]), end);
+document.getElementById('editStayBreakdownBtn').addEventListener('click', ()=>{
+  if(!pickStart || !pickEnd || pickEnd < pickStart) return;
+  const label = document.getElementById('tripLabel').value;
+  const baseline = trips.filter(t => t.id !== editingTripId);
+  openBreakdown(baseline.concat([{ start: pickStart, end: pickEnd, label, excludedRanges: pendingExcludedRanges }]), pickEnd);
 });
 document.getElementById('breakdownCloseBtn').addEventListener('click', ()=>{
   document.getElementById('breakdownModal').style.display = 'none';
@@ -2295,14 +2017,6 @@ document.getElementById('signOutBtn').addEventListener('click', async ()=>{
 
   document.getElementById('todayTag').textContent = fmt(todayISO());
   document.getElementById('refDate').value = todayISO();
-
-  const checkerCountrySelect = document.getElementById('checkerCountry');
-  ALL_COUNTRIES.forEach(name=>{
-    const opt = document.createElement('option');
-    opt.textContent = name;
-    if(name === 'Spain') opt.selected = true;
-    checkerCountrySelect.appendChild(opt);
-  });
 
   initNotifCheckboxes();
   updateLastBackupNote();
