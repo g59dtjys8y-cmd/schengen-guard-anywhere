@@ -439,7 +439,7 @@ function clearAppBadge(){
 }
 
 // --- Tab / screen navigation ---
-const PRIMARY_TABS = ['home','trips','calendar','settings'];
+const PRIMARY_TABS = ['home','trips','settings'];
 
 function switchTab(name){
   document.querySelectorAll('.screen').forEach(el=>{

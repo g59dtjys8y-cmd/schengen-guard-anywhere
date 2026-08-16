@@ -21,7 +21,6 @@
 
   "nav.home": "Home",
   "nav.trips": "Trips",
-  "nav.calendar": "Calendar",
   "nav.settings": "Settings",
 
   "backupNudge.text": "Want a local copy too? {{link}} from Settings.",
