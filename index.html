@@ -275,6 +275,7 @@
             <span><i style="background:var(--color-accent-2);"></i><span data-i18n="calendar.legend.overstay">overstay</span></span>
             <span><i style="background:repeating-linear-gradient(45deg, var(--color-neutral-300), var(--color-neutral-300) 2px, var(--color-neutral-400) 2px, var(--color-neutral-400) 4px); border:1px dashed var(--color-neutral-600);"></i><span data-i18n="calendar.legend.excluded">outside Schengen (excluded)</span></span>
           </div>
+          <button type="button" class="btn btn-secondary btn-block" id="checkerShareYearBtn" style="margin-top:14px;" data-i18n="year.shareBtn">Share your year</button>
         </div>
 
         <div id="checkerHistoryView" style="display:none;">
@@ -699,6 +700,40 @@
         </table>
       </div>
       <button type="button" class="btn btn-secondary btn-block" id="breakdownCloseBtn" data-i18n="breakdown.close">Close</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="yearRecapModal" style="display:none;">
+    <div class="modal-card recap-modal-card">
+      <div class="recap-card" id="recapCard">
+        <div class="recap-star-arc" id="recapStarArc"></div>
+        <p class="recap-kicker">Schengen Guard Anywhere</p>
+        <div class="recap-rule"></div>
+        <div class="recap-year" id="recapYear"></div>
+        <p class="recap-subtitle" data-i18n="year.recapSubtitle">Your year in the zone</p>
+
+        <div class="recap-hero">
+          <div class="n" id="recapDays"></div>
+          <div class="l" data-i18n="year.recapDaysLabel">Days in the Schengen zone</div>
+        </div>
+
+        <div class="recap-month-strip" id="recapMonthStrip"></div>
+
+        <div class="recap-stat-grid">
+          <div class="recap-stat"><div class="n" id="recapCountries"></div><div class="l" data-i18n="year.recapCountries">Countries visited</div></div>
+          <div class="recap-stat"><div class="n" id="recapTrips"></div><div class="l" data-i18n="year.recapTrips">Trips logged</div></div>
+          <div class="recap-stat"><div class="n" id="recapLongest"></div><div class="l" id="recapLongestLabel"></div></div>
+          <div class="recap-stat"><div class="n" id="recapClosest"></div><div class="l" id="recapClosestLabel"></div></div>
+        </div>
+
+        <div class="recap-stamp-row" id="recapStampRow"></div>
+
+        <div class="recap-footer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 6v6c0 5 4 8 9 10 5-2 9-5 9-10V6l-9-4z"></path></svg>
+          <span data-i18n="year.recapFooter">90/180-day tracker</span>
+        </div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-block" id="yearRecapCloseBtn" data-i18n="year.recapClose" style="margin-top:14px;">Close</button>
     </div>
   </div>
 </div>

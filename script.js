@@ -1204,6 +1204,103 @@ function renderHistoryView(){
 document.getElementById('checkerHistoryPrev').addEventListener('click', ()=>{ checkerYearCursor--; renderHistoryView(); });
 document.getElementById('checkerHistoryNext').addEventListener('click', ()=>{ checkerYearCursor++; renderHistoryView(); });
 
+// --- "Share your year" recap card — a passport-styled summary of Year view's own numbers ---
+
+function renderRecapStarArc(){
+  const arc = document.getElementById('recapStarArc');
+  arc.innerHTML = '';
+  const n = 9, spread = 280, cx = 146, baseY = 11, dip = 7;
+  for(let i = 0; i < n; i++){
+    const frac = i / (n - 1);
+    const el = document.createElement('span');
+    el.textContent = '★';
+    el.style.left = ((frac - 0.5) * spread + cx) + 'px';
+    el.style.top = (baseY - Math.sin(frac * Math.PI) * dip) + 'px';
+    el.style.opacity = String(0.55 + 0.45 * Math.sin(frac * Math.PI));
+    arc.appendChild(el);
+  }
+}
+
+function openYearRecap(){
+  const year = checkerYearCursor;
+  const locale = INTL_LOCALE[currentLang] || 'en-GB';
+  const yearTrips = trips.filter(tr => tr.start.slice(0, 4) === String(year));
+
+  const covered = coveredDates(trips);
+  const plannedSet = coveredDates(trips.filter(tr=>classifyTrip(tr)==='planned'));
+  const excluded = excludedDatesSet(trips);
+
+  let daysInZone = 0;
+  const perMonthTotal = new Array(12).fill(0);
+  const perMonthPlanned = new Array(12).fill(0);
+  for(let m=0; m<12; m++){
+    const daysInMonth = new Date(year, m+1, 0).getDate();
+    for(let day=1; day<=daysInMonth; day++){
+      const iso = year+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+      const cls = classifyYearDay(iso, covered, plannedSet, excluded);
+      if(cls === 'active' || cls === 'overstay' || cls === 'planned'){
+        daysInZone++;
+        perMonthTotal[m]++;
+        if(cls === 'planned') perMonthPlanned[m]++;
+      }
+    }
+  }
+
+  const visitedSet = new Set();
+  for(const tr of yearTrips){
+    if(classifyTrip(tr) !== 'planned' && tr.label) visitedSet.add(tr.label);
+  }
+
+  let longest = null;
+  for(const tr of yearTrips){
+    const days = Math.round((toDate(tr.end) - toDate(tr.start)) / 86400000) + 1;
+    if(!longest || days > longest.days) longest = { label: tr.label, days };
+  }
+
+  let closest = null;
+  for(let m=0; m<12; m++){
+    const lastDay = new Date(year, m+1, 0).getDate();
+    const endIso = year+'-'+String(m+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+    const remaining = Math.max(0, 90 - usedDaysInWindow(trips, endIso));
+    if(!closest || remaining < closest.remaining) closest = { m, remaining };
+  }
+
+  document.getElementById('recapYear').textContent = String(year);
+  document.getElementById('recapDays').textContent = String(daysInZone);
+  document.getElementById('recapCountries').textContent = String(visitedSet.size);
+  document.getElementById('recapTrips').textContent = String(yearTrips.length);
+
+  document.getElementById('recapLongest').textContent = longest ? String(longest.days) : '—';
+  document.getElementById('recapLongestLabel').textContent = longest
+    ? t('year.recapLongestLabel', { country: longest.label ? escapeHtml(longest.label) : t('calendar.dash') })
+    : t('year.recapNoTrips');
+
+  document.getElementById('recapClosest').textContent = closest ? String(closest.remaining) : '—';
+  document.getElementById('recapClosestLabel').textContent = closest
+    ? t('year.recapClosestLabel', { month: new Date(year, closest.m, 1).toLocaleDateString(locale, { month: 'long' }) })
+    : '';
+
+  const maxMonthDays = Math.max(...perMonthTotal, 1);
+  document.getElementById('recapMonthStrip').innerHTML = perMonthTotal.map((v, m) => {
+    const height = v === 0 ? 12 : 12 + (v / maxMonthDays) * 88;
+    const violet = perMonthPlanned[m] > v / 2;
+    return `<i class="${violet ? 'violet' : ''}" style="height:${height.toFixed(0)}%;"></i>`;
+  }).join('');
+
+  document.getElementById('recapStampRow').innerHTML = [...visitedSet].map(label => stampHtml(label)).join('');
+
+  renderRecapStarArc();
+  document.getElementById('yearRecapModal').style.display = 'flex';
+}
+
+document.getElementById('checkerShareYearBtn').addEventListener('click', openYearRecap);
+document.getElementById('yearRecapCloseBtn').addEventListener('click', ()=>{
+  document.getElementById('yearRecapModal').style.display = 'none';
+});
+document.getElementById('yearRecapModal').addEventListener('click', (e)=>{
+  if(e.target.id === 'yearRecapModal') document.getElementById('yearRecapModal').style.display = 'none';
+});
+
 function checkerHandlePick(iso){
   if(checkerPickingExclusion){
     checkerHandleExclusionPick(iso);
