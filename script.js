@@ -458,7 +458,7 @@ function clearAppBadge(){
 }
 
 // --- Tab / screen navigation ---
-const PRIMARY_TABS = ['home','calendar','triplist','editStay','settings'];
+const PRIMARY_TABS = ['home','trips','calendar','settings'];
 
 function switchTab(name){
   document.querySelectorAll('.screen').forEach(el=>{
@@ -486,11 +486,11 @@ document.getElementById('countriesCard').addEventListener('click', ()=>{
 document.getElementById('countriesBackBtn').addEventListener('click', ()=> switchTab('settings'));
 document.getElementById('homeAddTripBtn').addEventListener('click', ()=>{
   stopEditTrip();
-  switchTab('editStay');
+  switchTab('calendar');
 });
 document.getElementById('tripListAddBtn').addEventListener('click', ()=>{
   stopEditTrip();
-  switchTab('editStay');
+  switchTab('calendar');
 });
 document.getElementById('faqCard').addEventListener('click', ()=> switchTab('faq'));
 document.getElementById('faqBackBtn').addEventListener('click', ()=> switchTab('settings'));
@@ -662,14 +662,14 @@ function renderActiveTrip(trip){
     bodyEl.innerHTML = `Entered ${fmt(trip.start)} · planned exit ${fmt(trip.end)} · could stay until ${boldDate(lastExit)}`;
   }
 
-  panel.onclick = () => switchTab('triplist');
+  panel.onclick = () => switchTab('trips');
 }
 
 function renderCompactNextTrip(trip){
   const row = document.getElementById('nextTripCompact');
   document.getElementById('nextTripCompactCountry').textContent = trip.label || '—';
   document.getElementById('nextTripCompactDates').textContent = `${fmt(trip.start)} → ${fmt(trip.end)}`;
-  row.onclick = () => switchTab('triplist');
+  row.onclick = () => switchTab('trips');
 }
 
 function renderFullNextTrip(trip){
@@ -693,7 +693,7 @@ function renderFullNextTrip(trip){
       : '';
   }
 
-  document.getElementById('nextTripPanel').onclick = () => switchTab('triplist');
+  document.getElementById('nextTripPanel').onclick = () => switchTab('trips');
 }
 
 // Countries with a trip that's already started (active or past) count as "visited" —
@@ -1324,7 +1324,7 @@ function startEditTrip(id){
   document.getElementById('calendarHeading').textContent = 'Edit stay';
 
   calCursor = new Date(toDate(trip.start)); calCursor.setDate(1);
-  switchTab('editStay');
+  switchTab('calendar');
   renderCalendar();
   renderExclusionSection();
 }
@@ -1464,7 +1464,7 @@ document.getElementById('addExclusionBtn').addEventListener('click', ()=>{
 
 document.getElementById('cancelEditBtn').addEventListener('click', ()=>{
   stopEditTrip();
-  switchTab('triplist');
+  switchTab('trips');
 });
 
 document.getElementById('prevMonth').addEventListener('click', ()=>{
@@ -1546,7 +1546,7 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   }
   stopEditTrip();
   render();
-  switchTab('triplist');
+  switchTab('trips');
 });
 
 document.getElementById('refDate').addEventListener('change', render);
