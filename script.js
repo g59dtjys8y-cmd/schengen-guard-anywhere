@@ -2202,6 +2202,10 @@ async function applyLang(lang){
   renderEtiasLastChecked();
   render();
   renderExclusionSection();
+  document.getElementById('checkerPickStartLbl').textContent = t('calendar.entryTag', { date: checkerPickStart ? fmt(checkerPickStart) : t('calendar.dash') });
+  document.getElementById('checkerPickEndLbl').textContent = t('calendar.exitTag', { date: checkerPickEnd ? fmt(checkerPickEnd) : t('calendar.dash') });
+  document.getElementById('pickStartLbl').textContent = t('calendar.entryTag', { date: pickStart ? fmt(pickStart) : t('calendar.dash') });
+  document.getElementById('pickEndLbl').textContent = t('calendar.exitTag', { date: pickEnd ? fmt(pickEnd) : t('calendar.dash') });
 }
 document.getElementById('langEnBtn').addEventListener('click', ()=> applyLang('en'));
 document.getElementById('langZhBtn').addEventListener('click', ()=> applyLang('zh'));
