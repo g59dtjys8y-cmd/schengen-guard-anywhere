@@ -64,6 +64,11 @@
 
   --color-process-yellow:#edbb00;
 
+  --color-warn:#92400e;
+  --color-warn-tint:#fdecc8;
+  --color-danger:#b91c1c;
+  --color-danger-tint:#fce4e4;
+
   --font-heading:"Source Serif 4", Georgia, serif;
   --font-body:"Source Serif 4", Georgia, serif;
 
@@ -133,6 +138,11 @@
     --color-accent-2-700:#ff8bb9;
     --color-accent-2-800:#ffb1cf;
 
+    --color-warn:#f2b84d;
+    --color-warn-tint:#3a2a10;
+    --color-danger:#ff6b60;
+    --color-danger-tint:#3a1512;
+
     --shadow-sm:0 1px 2px rgba(0,0,0,.4);
     --shadow-md:0 3px 10px rgba(0,0,0,.5);
 
@@ -174,6 +184,11 @@
   --color-accent-2-600:#ff6ba8;
   --color-accent-2-700:#ff8bb9;
   --color-accent-2-800:#ffb1cf;
+
+  --color-warn:#f2b84d;
+  --color-warn-tint:#3a2a10;
+  --color-danger:#ff6b60;
+  --color-danger-tint:#3a1512;
 
   --shadow-sm:0 1px 2px rgba(0,0,0,.4);
   --shadow-md:0 3px 10px rgba(0,0,0,.5);

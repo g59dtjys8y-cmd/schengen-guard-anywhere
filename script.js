@@ -548,15 +548,16 @@ document.getElementById('privacyBackBtn').addEventListener('click', ()=> switchT
 // --- Home: arc ring + last-day card + next trip + countries ---
 
 function statusColorVar(used, remaining, exitIsoIsNull){
-  if(used > 90 || exitIsoIsNull) return 'var(--color-accent-2-700)';
-  if(remaining <= 20) return 'var(--color-accent-2-600)';
+  if(used > 90 || exitIsoIsNull || remaining <= 7) return 'var(--color-danger)';
+  if(remaining <= 14) return 'var(--color-warn)';
   return 'var(--color-accent)';
 }
 
-// Result-block background tint — healthy gets the accent tint, warning and danger
-// (over limit / no valid exit) share the same accent-2 tint the eyebrow/big-date use.
+// Result-block background tint — healthy gets the accent tint, and warning/danger each
+// get their own soft tint matching the days-left ring's colour.
 function statusTintVar(used, remaining, exitIsoIsNull){
-  if(used > 90 || exitIsoIsNull || remaining <= 20) return 'var(--color-accent-2-100)';
+  if(used > 90 || exitIsoIsNull || remaining <= 7) return 'var(--color-danger-tint)';
+  if(remaining <= 14) return 'var(--color-warn-tint)';
   return 'var(--color-accent-100)';
 }
 
