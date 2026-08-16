@@ -793,28 +793,27 @@ function renderTripRows(){
     return a.start < b.start ? 1 : a.start > b.start ? -1 : 0;
   });
 
-  const completedRows = [];
-  for(const trip of trips){
-    const status = classifyTrip(trip);
-    const row = buildTripRow(trip, status);
-    if(status === 'past') completedRows.push(row);
-    else rowsEl.appendChild(row);
+  const visible = trips.slice(0, 4);
+  const older = trips.slice(4);
+
+  for(const trip of visible){
+    rowsEl.appendChild(buildTripRow(trip, classifyTrip(trip)));
   }
 
-  // All done stays live collapsed under one expandable group, out of the way by default.
-  if(completedRows.length){
+  // Everything past the 4 most recent lives collapsed under one expandable group.
+  if(older.length){
     const group = document.createElement('details');
     group.className = 'card';
     group.innerHTML = `
       <summary class="qc-title-row">
-        <span class="qc-title-label"><span class="qc-title-black">Completed trips (${completedRows.length})</span></span>
+        <span class="qc-title-label"><span class="qc-title-black">Older trips (${older.length})</span></span>
         <span class="qc-title-rule"></span>
       </summary>
     `;
     const list = document.createElement('div');
     list.className = 'stack';
     list.style.marginTop = '10px';
-    completedRows.forEach(row => list.appendChild(row));
+    older.forEach(trip => list.appendChild(buildTripRow(trip, classifyTrip(trip))));
     group.appendChild(list);
     rowsEl.appendChild(group);
   }
