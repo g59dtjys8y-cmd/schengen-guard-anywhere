@@ -1,6 +1,7 @@
-const CACHE_NAME = 'schengen-guard-anywhere-v4';
+const CACHE_NAME = 'schengen-guard-anywhere-v5';
 const CORE_FILES = [
   './', 'index.html', 'style.css', 'script.js', 'manifest.json', 'icon-192.png', 'icon-512.png',
+  'icon-192-warn.png', 'icon-192-danger.png',
   'fonts/source-serif-4/source-serif-4-400.woff2', 'fonts/source-serif-4/source-serif-4-400-italic.woff2'
 ];
 
