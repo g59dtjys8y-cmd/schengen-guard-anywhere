@@ -181,10 +181,10 @@
 
     </div>
 
-    <!-- TRIPS -->
-    <div class="screen" id="tab-trips" style="display:none;">
+    <!-- CALENDAR (Safe Trip Checker) -->
+    <div class="screen" id="tab-calendar" style="display:none;">
       <div class="masthead" style="padding-top:4px;">
-        <h1 style="font-size:22px;" data-i18n="trips.heading">Your trips</h1>
+        <h1 style="font-size:22px;" data-i18n="checker.heading">Calendar</h1>
       </div>
 
       <div class="card safe-trip-checker" id="checkerCard">
@@ -247,6 +247,13 @@
 
         <button type="button" class="btn btn-primary btn-block" id="checkerSaveBtn" disabled data-i18n="trips.saveTrip">Save trip</button>
       </div>
+    </div>
+
+    <!-- TRIPS -->
+    <div class="screen" id="tab-triplist" style="display:none;">
+      <div class="masthead" style="padding-top:4px;">
+        <h1 style="font-size:22px;" data-i18n="trips.heading">Your trips</h1>
+      </div>
 
       <div id="tripRows" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
@@ -287,8 +294,8 @@
       </div>
     </div>
 
-    <!-- CALENDAR -->
-    <div class="screen" id="tab-calendar" style="display:none;">
+    <!-- EDIT STAY (reached from a trip's Edit button; not a primary tab) -->
+    <div class="screen" id="tab-editStay" style="display:none;">
       <h1 style="font-size:22px; padding-top:4px;" id="calendarHeading" data-i18n="calendar.logHeading">Log a stay</h1>
       <p class="card-body" style="margin:6px 0 16px;" data-i18n="calendar.intro">Tap the entry date, then the exit date, right on the calendar. Each date also shows your days remaining as of that day.</p>
 
@@ -488,17 +495,6 @@
         </div>
       </div>
 
-      <div class="card elev-sm card-row" id="privacyCard" style="cursor:pointer;">
-        <div>
-          <div class="qc-title-row" style="margin-bottom:2px;">
-            <span class="qc-title-label"><span class="qc-title-black" data-i18n="settings.helpTitle">Help</span></span>
-            <span class="qc-title-rule"></span>
-          </div>
-          <div class="card-title" style="font-size:18px;" data-i18n="settings.privacyTitle">Privacy &amp; Terms</div>
-        </div>
-        <span class="tag tag-neutral" data-i18n="settings.viewArrow">View →</span>
-      </div>
-
       <div class="card elev-sm card-row" id="faqCard" style="cursor:pointer;">
         <div>
           <div class="qc-title-row" style="margin-bottom:2px;">
@@ -506,6 +502,17 @@
             <span class="qc-title-rule"></span>
           </div>
           <div class="card-title" style="font-size:18px;" data-i18n="settings.faqTitle">FAQ &amp; terms</div>
+        </div>
+        <span class="tag tag-neutral" data-i18n="settings.viewArrow">View →</span>
+      </div>
+
+      <div class="card elev-sm card-row" id="privacyCard" style="cursor:pointer;">
+        <div>
+          <div class="qc-title-row" style="margin-bottom:2px;">
+            <span class="qc-title-label"><span class="qc-title-black" data-i18n="settings.helpTitle">Help</span></span>
+            <span class="qc-title-rule"></span>
+          </div>
+          <div class="card-title" style="font-size:18px;" data-i18n="settings.privacyTitle">Privacy &amp; Terms</div>
         </div>
         <span class="tag tag-neutral" data-i18n="settings.viewArrow">View →</span>
       </div>
@@ -595,7 +602,11 @@
       <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
       <span data-i18n="nav.home">Home</span>
     </button>
-    <button class="tab-btn" data-tab="trips">
+    <button class="tab-btn" data-tab="calendar">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="1.5"/><path d="M3.5 10h17"/><path d="M8 3v4M16 3v4"/></svg>
+      <span data-i18n="nav.calendar">Calendar</span>
+    </button>
+    <button class="tab-btn" data-tab="triplist">
       <svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="1.5"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
       <span data-i18n="nav.trips">Trips</span>
     </button>

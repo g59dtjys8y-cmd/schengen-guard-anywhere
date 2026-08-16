@@ -439,7 +439,7 @@ function clearAppBadge(){
 }
 
 // --- Tab / screen navigation ---
-const PRIMARY_TABS = ['home','trips','calendar','settings'];
+const PRIMARY_TABS = ['home','calendar','triplist','editStay','settings'];
 
 function switchTab(name){
   document.querySelectorAll('.screen').forEach(el=>{
@@ -466,7 +466,7 @@ document.getElementById('countriesCard').addEventListener('click', ()=>{
 });
 document.getElementById('countriesBackBtn').addEventListener('click', ()=> switchTab('settings'));
 document.getElementById('homeAddTripBtn').addEventListener('click', ()=>{
-  switchTab('trips');
+  switchTab('calendar');
   document.getElementById('checkerEntry').focus();
 });
 document.getElementById('faqCard').addEventListener('click', ()=> switchTab('faq'));
@@ -643,14 +643,14 @@ function renderActiveTrip(trip){
     });
   }
 
-  panel.onclick = () => switchTab('trips');
+  panel.onclick = () => switchTab('triplist');
 }
 
 function renderCompactNextTrip(trip){
   const row = document.getElementById('nextTripCompact');
   document.getElementById('nextTripCompactCountry').textContent = trip.label || t('calendar.dash');
   document.getElementById('nextTripCompactDates').textContent = `${fmt(trip.start)} → ${fmt(trip.end)}`;
-  row.onclick = () => switchTab('trips');
+  row.onclick = () => switchTab('triplist');
 }
 
 function renderFullNextTrip(trip){
@@ -674,7 +674,7 @@ function renderFullNextTrip(trip){
       : '';
   }
 
-  document.getElementById('nextTripPanel').onclick = () => switchTab('trips');
+  document.getElementById('nextTripPanel').onclick = () => switchTab('triplist');
 }
 
 // Countries with a trip that's already started (active or past) count as "visited" —
@@ -1192,7 +1192,7 @@ function startEditTrip(id){
   document.getElementById('calendarHeading').textContent = t('calendar.editHeading');
 
   calCursor = new Date(toDate(trip.start)); calCursor.setDate(1);
-  switchTab('calendar');
+  switchTab('editStay');
   renderCalendar();
   renderExclusionSection();
 }
@@ -1329,7 +1329,7 @@ document.getElementById('addExclusionBtn').addEventListener('click', ()=>{
 
 document.getElementById('cancelEditBtn').addEventListener('click', ()=>{
   stopEditTrip();
-  switchTab('trips');
+  switchTab('triplist');
 });
 
 document.getElementById('prevMonth').addEventListener('click', ()=>{
@@ -1410,7 +1410,7 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   }
   stopEditTrip();
   render();
-  if(wasEditing) switchTab('trips');
+  if(wasEditing) switchTab('triplist');
 });
 
 document.getElementById('refDate').addEventListener('change', render);

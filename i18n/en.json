@@ -20,6 +20,7 @@
   "settings.signOut": "Sign out",
 
   "nav.home": "Home",
+  "nav.calendar": "Calendar",
   "nav.trips": "Trips",
   "nav.settings": "Settings",
 
@@ -61,6 +62,7 @@
 
   "trips.heading": "Your trips",
   "trips.addAria": "Add a trip",
+  "checker.heading": "Calendar",
   "trips.checkerTitleWord1": "Safe",
   "trips.checkerTitleWord2": "Trip Checker",
   "trips.country": "Country",
