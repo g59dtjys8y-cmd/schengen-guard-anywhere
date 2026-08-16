@@ -66,6 +66,7 @@
   "trips.checkerTitleWord1": "Safe",
   "trips.checkerTitleWord2": "Trip Checker",
   "trips.country": "Country",
+  "trips.note": "Note",
   "trips.entry": "Entry",
   "trips.exit": "Exit",
   "trips.checkerPrompt": "Pick an entry and exit date to check compliance before you save it.",

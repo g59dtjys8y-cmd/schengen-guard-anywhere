@@ -1,5 +1,6 @@
 // Points at the existing Supabase project originally used by Schengen Buddy. Make sure the
-// `trips` table has the `excluded_ranges` jsonb column (see README) before relying on it.
+// `trips` table has the `excluded_ranges` jsonb and `note` text columns (see README) before
+// relying on them.
 const SUPABASE_URL = 'https://dwjftvqlynlefwruvwfs.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_JPZoPe7suyMtyV-EEEqD8Q_ksgb0Q9o';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -424,7 +425,7 @@ async function loadTrips(){
     if(error) throw error;
     trips = (data || []).map(row => ({
       id: row.id, start: row.start_date, end: row.end_date, label: row.country,
-      excludedRanges: row.excluded_ranges || []
+      excludedRanges: row.excluded_ranges || [], note: row.note || ''
     }));
   }catch(e){
     trips = [];
@@ -432,21 +433,22 @@ async function loadTrips(){
 }
 
 // Insert one trip into Supabase, then reload so ids/ordering stay in sync with the database
-async function insertTrip(start, end, label, excludedRanges){
+async function insertTrip(start, end, label, excludedRanges, note){
   const { error } = await db.from('trips').insert([{
-    start_date: start, end_date: end, country: label, excluded_ranges: excludedRanges || []
+    start_date: start, end_date: end, country: label, excluded_ranges: excludedRanges || [], note: note || ''
   }]);
   if(error) throw error;
   await loadTrips();
   markTripsChanged();
 }
 
-// Update one existing trip's dates/country/exclusions, then reload
-async function updateTrip(id, start, end, label, excludedRanges){
+// Update one existing trip's dates/country/exclusions/note, then reload
+async function updateTrip(id, start, end, label, excludedRanges, note){
   const existing = trips.find(t => t.id === id);
   const { error } = await db.from('trips').update({
     start_date: start, end_date: end, country: label,
-    excluded_ranges: excludedRanges || (existing && existing.excludedRanges) || []
+    excluded_ranges: excludedRanges || (existing && existing.excludedRanges) || [],
+    note: note !== undefined ? note : ((existing && existing.note) || '')
   }).eq('id', id);
   if(error) throw error;
   await loadTrips();
@@ -797,6 +799,9 @@ function buildTripRow(trip, status){
   const exclNote = exclDays > 0
     ? `<div style="margin-top:4px;"><span class="tag tag-excluded">${tn('trips.excludedDays', exclDays)}</span></div>`
     : '';
+  const noteHtml = trip.note
+    ? `<p class="note trip-note">${escapeHtml(trip.note)}</p>`
+    : '';
 
   const country = `${trip.label ? flagIconHtml(trip.label) : ''}${trip.label ? escapeHtml(trip.label) : t('calendar.dash')}${warnIcon}`;
   const dates = `${fmt(trip.start)} – ${fmt(trip.end)}`;
@@ -809,6 +814,7 @@ function buildTripRow(trip, status){
       <div class="country">${country}</div>
       <div class="dates">${dates}</div>
       ${exclNote}
+      ${noteHtml}
       <div class="row-actions">
         <button type="button" class="link-btn" data-action="edit" data-id="${trip.id}">${t('trips.edit')}</button>
         <button type="button" class="link-btn danger-link" data-action="remove" data-id="${trip.id}">${t('trips.remove')}</button>
@@ -1174,6 +1180,7 @@ document.getElementById('checkerSaveBtn').addEventListener('click', async ()=>{
   const label = document.getElementById('checkerCountry').value;
   const start = document.getElementById('checkerEntry').value;
   const end = document.getElementById('checkerExit').value;
+  const note = document.getElementById('checkerNote').value.trim();
   const errEl = document.getElementById('checkerError');
   errEl.style.display = 'none';
   if(!start || !end || end < start) return;
@@ -1184,7 +1191,7 @@ document.getElementById('checkerSaveBtn').addEventListener('click', async ()=>{
     if(!proceed) return;
   }
   try{
-    await insertTrip(start, end, label, checkerPendingExcludedRanges);
+    await insertTrip(start, end, label, checkerPendingExcludedRanges, note);
   }catch(e){
     errEl.textContent = t('trips.saveError');
     errEl.style.display = 'block';
@@ -1193,6 +1200,7 @@ document.getElementById('checkerSaveBtn').addEventListener('click', async ()=>{
   checkerPickStart = null; checkerPickEnd = null;
   document.getElementById('checkerEntry').value = '';
   document.getElementById('checkerExit').value = '';
+  document.getElementById('checkerNote').value = '';
   document.getElementById('checkerPickStartLbl').textContent = t('calendar.entryTag', { date: t('calendar.dash') });
   document.getElementById('checkerPickEndLbl').textContent = t('calendar.exitTag', { date: t('calendar.dash') });
   checkerPendingExcludedRanges = [];
@@ -1294,6 +1302,7 @@ function startEditTrip(id){
   document.getElementById('tripLabel').value = trip.label;
   document.getElementById('tripStart').value = trip.start;
   document.getElementById('tripEnd').value = trip.end;
+  document.getElementById('tripNote').value = trip.note || '';
   document.getElementById('pickStartLbl').textContent = t('calendar.entryTag', { date: fmt(trip.start) });
   document.getElementById('pickEndLbl').textContent = t('calendar.exitTag', { date: fmt(trip.end) });
   document.getElementById('formError').style.display = 'none';
@@ -1315,6 +1324,7 @@ function stopEditTrip(){
   document.getElementById('tripLabel').value = '';
   document.getElementById('tripStart').value = '';
   document.getElementById('tripEnd').value = '';
+  document.getElementById('tripNote').value = '';
   document.getElementById('pickStartLbl').textContent = t('calendar.entryTag', { date: t('calendar.dash') });
   document.getElementById('pickEndLbl').textContent = t('calendar.exitTag', { date: t('calendar.dash') });
   document.getElementById('formError').style.display = 'none';
@@ -1488,6 +1498,7 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   const label = document.getElementById('tripLabel').value.trim();
   const start = document.getElementById('tripStart').value;
   const end = document.getElementById('tripEnd').value;
+  const note = document.getElementById('tripNote').value.trim();
   const errEl = document.getElementById('formError');
   errEl.style.display = 'none';
   if(!start || !end){
@@ -1509,9 +1520,9 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   const wasEditing = editingTripId !== null;
   try{
     if(wasEditing){
-      await updateTrip(editingTripId, start, end, label, pendingExcludedRanges);
+      await updateTrip(editingTripId, start, end, label, pendingExcludedRanges, note);
     } else {
-      await insertTrip(start, end, label, pendingExcludedRanges);
+      await insertTrip(start, end, label, pendingExcludedRanges, note);
     }
   }catch(e){
     errEl.textContent = t('trips.saveError');
