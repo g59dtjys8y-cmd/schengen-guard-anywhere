@@ -465,9 +465,6 @@ document.getElementById('countriesCard').addEventListener('click', ()=>{
   switchTab('countries');
 });
 document.getElementById('countriesBackBtn').addEventListener('click', ()=> switchTab('settings'));
-document.getElementById('addTripShortcutBtn').addEventListener('click', ()=>{
-  document.getElementById('checkerEntry').focus();
-});
 document.getElementById('homeAddTripBtn').addEventListener('click', ()=>{
   switchTab('trips');
   document.getElementById('checkerEntry').focus();
@@ -752,21 +749,48 @@ function renderTripRows(){
       ? `<div style="margin-top:4px;"><span class="tag tag-excluded">${tn('trips.excludedDays', exclDays)}</span></div>`
       : '';
 
-    const row = document.createElement('div');
-    row.className = 'card elev-sm trip-row';
-    row.innerHTML = `
-      <div class="trip-days"><div class="n">${days}</div><div class="lbl">${t('trips.days')}</div></div>
-      <div class="trip-info">
-        <div class="country">${trip.label ? flagIconHtml(trip.label) : ''}${trip.label ? escapeHtml(trip.label) : t('calendar.dash')}${warnIcon}</div>
-        <div class="dates">${fmt(trip.start)} – ${fmt(trip.end)}</div>
-        ${exclNote}
-        <div class="row-actions">
-          <button type="button" class="link-btn" data-action="edit" data-id="${trip.id}">${t('trips.edit')}</button>
-          <button type="button" class="link-btn danger-link" data-action="remove" data-id="${trip.id}">${t('trips.remove')}</button>
-        </div>
+    const country = `${trip.label ? flagIconHtml(trip.label) : ''}${trip.label ? escapeHtml(trip.label) : t('calendar.dash')}${warnIcon}`;
+    const dates = `${fmt(trip.start)} – ${fmt(trip.end)}`;
+    const actions = `
+      <div class="row-actions">
+        <button type="button" class="link-btn" data-action="edit" data-id="${trip.id}">${t('trips.edit')}</button>
+        <button type="button" class="link-btn danger-link" data-action="remove" data-id="${trip.id}">${t('trips.remove')}</button>
       </div>
-      <div class="trip-status">${statusHtml}</div>
     `;
+
+    let row;
+    if(status === 'past'){
+      // Collapsed by default to keep old stays out of the way; tap to expand for details/actions.
+      row = document.createElement('details');
+      row.className = 'card elev-sm trip-row-collapsible';
+      row.innerHTML = `
+        <summary class="trip-row-summary">
+          <div class="trip-days"><div class="n">${days}</div><div class="lbl">${t('trips.days')}</div></div>
+          <div class="trip-info">
+            <div class="country">${country}</div>
+            <div class="dates">${dates}</div>
+          </div>
+          <div class="trip-status">${statusHtml}</div>
+        </summary>
+        <div class="trip-row-details">
+          ${exclNote}
+          ${actions}
+        </div>
+      `;
+    } else {
+      row = document.createElement('div');
+      row.className = 'card elev-sm trip-row';
+      row.innerHTML = `
+        <div class="trip-days"><div class="n">${days}</div><div class="lbl">${t('trips.days')}</div></div>
+        <div class="trip-info">
+          <div class="country">${country}</div>
+          <div class="dates">${dates}</div>
+          ${exclNote}
+          ${actions}
+        </div>
+        <div class="trip-status">${statusHtml}</div>
+      `;
+    }
     rowsEl.appendChild(row);
   }
   rowsEl.querySelectorAll('[data-action="remove"]').forEach(btn=>{
