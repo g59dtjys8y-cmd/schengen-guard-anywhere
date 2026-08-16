@@ -713,6 +713,49 @@ function renderCountries(){
 
 // --- Trips list ---
 
+function buildTripRow(trip, status){
+  const days = Math.round((toDate(trip.end) - toDate(trip.start))/86400000) + 1;
+  const overstay = tripOverstayInfo(trips, trip, 90);
+  const warnIcon = overstay
+    ? `<span class="warn-icon" title="${t('trips.overstayWarnTitle', { date: fmt(overstay.date), used: overstay.used })}">&#9888;</span>`
+    : '';
+
+  let statusHtml;
+  if(status === 'past'){
+    statusHtml = `<div class="done-stamp"><div class="t">${t('trips.done')}</div><svg viewBox="0 0 24 24" fill="var(--color-text)"><path d="M12 0l2.9 8.1 8.6.1-6.9 5.3 2.6 8.2L12 16.9 5.8 21.7l2.6-8.2L1.5 8.2l8.6-.1z"></path></svg></div>`;
+  } else if(status === 'active'){
+    statusHtml = `<span class="tag tag-accent">${t('trips.active')}</span>`;
+  } else {
+    statusHtml = `<span class="tag tag-outline">${t('trips.planned')}</span>`;
+  }
+
+  let exclDays = 0;
+  for(const r of (trip.excludedRanges || [])) exclDays += Math.round((toDate(r.end) - toDate(r.start))/86400000) + 1;
+  const exclNote = exclDays > 0
+    ? `<div style="margin-top:4px;"><span class="tag tag-excluded">${tn('trips.excludedDays', exclDays)}</span></div>`
+    : '';
+
+  const country = `${trip.label ? flagIconHtml(trip.label) : ''}${trip.label ? escapeHtml(trip.label) : t('calendar.dash')}${warnIcon}`;
+  const dates = `${fmt(trip.start)} – ${fmt(trip.end)}`;
+
+  const row = document.createElement('div');
+  row.className = 'card elev-sm trip-row';
+  row.innerHTML = `
+    <div class="trip-days"><div class="n">${days}</div><div class="lbl">${t('trips.days')}</div></div>
+    <div class="trip-info">
+      <div class="country">${country}</div>
+      <div class="dates">${dates}</div>
+      ${exclNote}
+      <div class="row-actions">
+        <button type="button" class="link-btn" data-action="edit" data-id="${trip.id}">${t('trips.edit')}</button>
+        <button type="button" class="link-btn danger-link" data-action="remove" data-id="${trip.id}">${t('trips.remove')}</button>
+      </div>
+    </div>
+    <div class="trip-status">${statusHtml}</div>
+  `;
+  return row;
+}
+
 function renderTripRows(){
   const rowsEl = document.getElementById('tripRows');
   rowsEl.innerHTML = '';
@@ -726,73 +769,33 @@ function renderTripRows(){
     if(aActive !== bActive) return aActive ? -1 : 1;
     return a.start < b.start ? 1 : a.start > b.start ? -1 : 0;
   });
+
+  const completedRows = [];
   for(const trip of trips){
-    const days = Math.round((toDate(trip.end) - toDate(trip.start))/86400000) + 1;
     const status = classifyTrip(trip);
-    const overstay = tripOverstayInfo(trips, trip, 90);
-    const warnIcon = overstay
-      ? `<span class="warn-icon" title="${t('trips.overstayWarnTitle', { date: fmt(overstay.date), used: overstay.used })}">&#9888;</span>`
-      : '';
-
-    let statusHtml;
-    if(status === 'past'){
-      statusHtml = `<div class="done-stamp"><div class="t">${t('trips.done')}</div><svg viewBox="0 0 24 24" fill="var(--color-text)"><path d="M12 0l2.9 8.1 8.6.1-6.9 5.3 2.6 8.2L12 16.9 5.8 21.7l2.6-8.2L1.5 8.2l8.6-.1z"></path></svg></div>`;
-    } else if(status === 'active'){
-      statusHtml = `<span class="tag tag-accent">${t('trips.active')}</span>`;
-    } else {
-      statusHtml = `<span class="tag tag-outline">${t('trips.planned')}</span>`;
-    }
-
-    let exclDays = 0;
-    for(const r of (trip.excludedRanges || [])) exclDays += Math.round((toDate(r.end) - toDate(r.start))/86400000) + 1;
-    const exclNote = exclDays > 0
-      ? `<div style="margin-top:4px;"><span class="tag tag-excluded">${tn('trips.excludedDays', exclDays)}</span></div>`
-      : '';
-
-    const country = `${trip.label ? flagIconHtml(trip.label) : ''}${trip.label ? escapeHtml(trip.label) : t('calendar.dash')}${warnIcon}`;
-    const dates = `${fmt(trip.start)} – ${fmt(trip.end)}`;
-    const actions = `
-      <div class="row-actions">
-        <button type="button" class="link-btn" data-action="edit" data-id="${trip.id}">${t('trips.edit')}</button>
-        <button type="button" class="link-btn danger-link" data-action="remove" data-id="${trip.id}">${t('trips.remove')}</button>
-      </div>
-    `;
-
-    let row;
-    if(status === 'past'){
-      // Collapsed by default to keep old stays out of the way; tap to expand for details/actions.
-      row = document.createElement('details');
-      row.className = 'card elev-sm trip-row-collapsible';
-      row.innerHTML = `
-        <summary class="trip-row-summary">
-          <div class="trip-days"><div class="n">${days}</div><div class="lbl">${t('trips.days')}</div></div>
-          <div class="trip-info">
-            <div class="country">${country}</div>
-            <div class="dates">${dates}</div>
-          </div>
-          <div class="trip-status">${statusHtml}</div>
-        </summary>
-        <div class="trip-row-details">
-          ${exclNote}
-          ${actions}
-        </div>
-      `;
-    } else {
-      row = document.createElement('div');
-      row.className = 'card elev-sm trip-row';
-      row.innerHTML = `
-        <div class="trip-days"><div class="n">${days}</div><div class="lbl">${t('trips.days')}</div></div>
-        <div class="trip-info">
-          <div class="country">${country}</div>
-          <div class="dates">${dates}</div>
-          ${exclNote}
-          ${actions}
-        </div>
-        <div class="trip-status">${statusHtml}</div>
-      `;
-    }
-    rowsEl.appendChild(row);
+    const row = buildTripRow(trip, status);
+    if(status === 'past') completedRows.push(row);
+    else rowsEl.appendChild(row);
   }
+
+  // All done stays live collapsed under one expandable group, out of the way by default.
+  if(completedRows.length){
+    const group = document.createElement('details');
+    group.className = 'card';
+    group.innerHTML = `
+      <summary class="qc-title-row">
+        <span class="qc-title-label"><span class="qc-title-black">${t('trips.completedHeading', { n: completedRows.length })}</span></span>
+        <span class="qc-title-rule"></span>
+      </summary>
+    `;
+    const list = document.createElement('div');
+    list.className = 'stack';
+    list.style.marginTop = '10px';
+    completedRows.forEach(row => list.appendChild(row));
+    group.appendChild(list);
+    rowsEl.appendChild(group);
+  }
+
   rowsEl.querySelectorAll('[data-action="remove"]').forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
       await deleteTrip(e.currentTarget.getAttribute('data-id'));
