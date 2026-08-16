@@ -61,13 +61,18 @@ This is the cloud-synced sibling of [Schengen Guard](https://github.com/g59dtjys
      start_date date not null,
      end_date date not null,
      country text,
-     excluded_ranges jsonb not null default '[]'::jsonb
+     excluded_ranges jsonb not null default '[]'::jsonb,
+     note text not null default ''
    );
 
    alter table trips enable row level security;
 
    create policy "Users manage own trips" on trips for all
      using (auth.uid() = user_id) with check (auth.uid() = user_id);
+   ```
+   Already have a `trips` table from before the `note` column existed? Add it with:
+   ```sql
+   alter table trips add column if not exists note text not null default '';
    ```
 3. In **Authentication → Providers**, confirm Email is enabled. Optionally turn off "Confirm email" for simpler local testing.
 4. In `script.js`, replace `SUPABASE_URL` and `SUPABASE_KEY` with your own project's values (found under **Settings → API**).
