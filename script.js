@@ -210,6 +210,69 @@ function excludedDatesSet(list){
   return set;
 }
 
+// --- Calendar trip ribbons: a label band spanning a stay's dates across the top of each week ---
+
+// Unlike coveredDates(), this doesn't drop excluded (side-trip) days — the ribbon needs to
+// know a day is still part of the trip's date range even when it's shown as a hatched gap.
+function tripCoveringDate(list, iso){
+  return list.find(t => t.start <= iso && iso <= t.end);
+}
+
+// Groups a week's 7 slots (ISO date or null for padding) into runs of the same trip and the
+// same excluded state, so the calendar draws one ribbon segment per run instead of per day.
+function weekRibbonSegments(weekIsos, list){
+  const cols = weekIsos.map(iso => {
+    if(!iso) return null;
+    const trip = tripCoveringDate(list, iso);
+    return trip ? { trip, excluded: isExcludedDay(trip, iso) } : null;
+  });
+  const segments = [];
+  let start = null;
+  for(let c = 0; c <= 7; c++){
+    const cur = c < 7 ? cols[c] : null;
+    const matches = start !== null && cur && cur.trip === cols[start].trip && cur.excluded === cols[start].excluded;
+    if(start !== null && !matches){
+      segments.push({ from: start, to: c - 1, trip: cols[start].trip, excluded: cols[start].excluded });
+      start = cur ? c : null;
+    } else if(start === null && cur){
+      start = c;
+    }
+  }
+  return segments;
+}
+
+// Builds the HTML for one week's ribbon row, or '' if no trip touches that week. A segment's
+// ends are only rounded where they land on the trip's actual start/end date — everywhere else
+// (wrapping to the next row, or picking back up after an excluded-day gap) gets a square edge
+// and a chevron, the same way a multi-day event continues across rows on a normal calendar.
+function renderRibbonRow(weekIsos, list){
+  const segments = weekRibbonSegments(weekIsos, list);
+  if(!segments.length) return '';
+  const labeledTripIds = new Set();
+  const parts = segments.map(seg => {
+    if(seg.excluded){
+      return `<div class="ribbon-gap" style="grid-column:${seg.from + 1} / ${seg.to + 2};"></div>`;
+    }
+    const span = seg.to - seg.from + 1;
+    const roundedLeft = weekIsos[seg.from] === seg.trip.start;
+    const roundedRight = weekIsos[seg.to] === seg.trip.end;
+    const showLabel = !labeledTripIds.has(seg.trip.id);
+    labeledTripIds.add(seg.trip.id);
+    const planned = classifyTrip(seg.trip) === 'planned' ? ' planned' : '';
+    const roundClass = `${roundedLeft ? ' r-left' : ''}${roundedRight ? ' r-right' : ''}`;
+    const leftChev = !roundedLeft ? '<span class="chev">&lsaquo;</span>' : '';
+    const rightChev = !roundedRight ? '<span class="chev">&rsaquo;</span>' : '';
+    const flag = seg.trip.label ? flagIconHtml(seg.trip.label) : '';
+    // A single-day segment has no room for the country name — flag only.
+    const text = showLabel && span > 1
+      ? `<span class="ribbon-label">${seg.trip.label ? escapeHtml(seg.trip.label) : t('calendar.dash')}</span>`
+      : '';
+    const label = showLabel ? flag + text : '';
+    return `<div class="ribbon${planned}${roundClass}" style="grid-column:${seg.from + 1} / ${seg.to + 2};">${leftChev}${label}${rightChev}</div>`;
+  });
+  return `<div class="ribbon-row">${parts.join('')}</div>`;
+}
+
 function usedDaysInWindow(list, windowEndISO){
   const windowEnd = toDate(windowEndISO);
   const windowStart = addDays(windowEnd, -179);
@@ -878,11 +941,16 @@ function renderCheckerCalendar(){
   label.textContent = checkerCalCursor.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
   const grid = document.getElementById('checkerCalGrid');
   grid.innerHTML = '';
+
+  const dowRow = document.createElement('div');
+  dowRow.className = 'cal-dow-row';
   ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>{
     const el = document.createElement('div');
     el.className='cal-dow'; el.textContent=d;
-    grid.appendChild(el);
+    dowRow.appendChild(el);
   });
+  grid.appendChild(dowRow);
+
   const year = checkerCalCursor.getFullYear(), month = checkerCalCursor.getMonth();
   const firstDay = new Date(year, month, 1);
   let startOffset = firstDay.getDay() - 1; if(startOffset < 0) startOffset = 6;
@@ -892,38 +960,55 @@ function renderCheckerCalendar(){
   const excluded = excludedDatesSet(trips);
   const today = todayISO();
 
-  for(let i=0;i<startOffset;i++){
-    const pad = document.createElement('div'); pad.className='cal-day pad';
-    grid.appendChild(pad);
-  }
-  for(let day=1; day<=daysInMonth; day++){
-    const iso = year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    const el = document.createElement('div');
-    el.className = 'cal-day';
-    if(covered.has(iso)){
-      el.classList.add('in-trip');
-      if(plannedSet.has(iso)) el.classList.add('planned');
-    } else if(excluded.has(iso)){
-      el.classList.add('excluded');
-    }
-    if(checkerPendingExcludedRanges.some(r => iso >= r.start && iso <= r.end)) el.classList.add('excluded');
-    if(iso === today) el.classList.add('today');
-    const used = usedDaysInWindow(trips, iso);
-    const remaining = 90 - used;
-    if(used > 90) el.classList.add('overstay');
-    if(checkerPickStart && iso === checkerPickStart) el.classList.add('pick-start');
-    if(checkerPickEnd && iso === checkerPickEnd) el.classList.add('pick-end');
-    if(checkerPickStart && checkerPickEnd && iso > checkerPickStart && iso < checkerPickEnd) el.classList.add('pick-range');
-    if(checkerPickingExclusion){
-      if(!checkerPickStart || !checkerPickEnd || iso < checkerPickStart || iso > checkerPickEnd){
-        el.classList.add('excl-disabled');
-      } else if(checkerExclPickStart && (iso === checkerExclPickStart || (checkerExclPickEnd && iso >= checkerExclPickStart && iso <= checkerExclPickEnd))){
-        el.classList.add('selecting');
+  const slots = [];
+  for(let i=0;i<startOffset;i++) slots.push(null);
+  for(let day=1; day<=daysInMonth; day++) slots.push(year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0'));
+  while(slots.length % 7 !== 0) slots.push(null);
+
+  for(let w=0; w<slots.length; w+=7){
+    const weekIsos = slots.slice(w, w+7);
+    const weekEl = document.createElement('div');
+    weekEl.className = 'cal-week';
+    weekEl.insertAdjacentHTML('beforeend', renderRibbonRow(weekIsos, trips));
+
+    const dayRow = document.createElement('div');
+    dayRow.className = 'cal-day-row';
+    for(const iso of weekIsos){
+      if(!iso){
+        const pad = document.createElement('div'); pad.className='cal-day pad';
+        dayRow.appendChild(pad);
+        continue;
       }
+      const day = Number(iso.slice(-2));
+      const el = document.createElement('div');
+      el.className = 'cal-day';
+      if(covered.has(iso)){
+        el.classList.add('in-trip');
+        if(plannedSet.has(iso)) el.classList.add('planned');
+      } else if(excluded.has(iso)){
+        el.classList.add('excluded');
+      }
+      if(checkerPendingExcludedRanges.some(r => iso >= r.start && iso <= r.end)) el.classList.add('excluded');
+      if(iso === today) el.classList.add('today');
+      const used = usedDaysInWindow(trips, iso);
+      const remaining = 90 - used;
+      if(used > 90) el.classList.add('overstay');
+      if(checkerPickStart && iso === checkerPickStart) el.classList.add('pick-start');
+      if(checkerPickEnd && iso === checkerPickEnd) el.classList.add('pick-end');
+      if(checkerPickStart && checkerPickEnd && iso > checkerPickStart && iso < checkerPickEnd) el.classList.add('pick-range');
+      if(checkerPickingExclusion){
+        if(!checkerPickStart || !checkerPickEnd || iso < checkerPickStart || iso > checkerPickEnd){
+          el.classList.add('excl-disabled');
+        } else if(checkerExclPickStart && (iso === checkerExclPickStart || (checkerExclPickEnd && iso >= checkerExclPickStart && iso <= checkerExclPickEnd))){
+          el.classList.add('selecting');
+        }
+      }
+      el.innerHTML = `<span class="daynum">${day}</span><span class="rem">${used>90 ? '−'+(used-90) : remaining}</span>`;
+      el.addEventListener('click', ()=>checkerHandlePick(iso));
+      dayRow.appendChild(el);
     }
-    el.innerHTML = `<span class="daynum">${day}</span><span class="rem">${used>90 ? '−'+(used-90) : remaining}</span>`;
-    el.addEventListener('click', ()=>checkerHandlePick(iso));
-    grid.appendChild(el);
+    weekEl.appendChild(dayRow);
+    grid.appendChild(weekEl);
   }
 }
 
@@ -1125,11 +1210,16 @@ function renderCalendar(){
   label.textContent = calCursor.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
   const grid = document.getElementById('calGrid');
   grid.innerHTML = '';
+
+  const dowRow = document.createElement('div');
+  dowRow.className = 'cal-dow-row';
   ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d=>{
     const el = document.createElement('div');
     el.className='cal-dow'; el.textContent=d;
-    grid.appendChild(el);
+    dowRow.appendChild(el);
   });
+  grid.appendChild(dowRow);
+
   const year = calCursor.getFullYear(), month = calCursor.getMonth();
   const firstDay = new Date(year, month, 1);
   let startOffset = firstDay.getDay() - 1; if(startOffset < 0) startOffset = 6;
@@ -1139,38 +1229,55 @@ function renderCalendar(){
   const excluded = excludedDatesSet(trips);
   const today = todayISO();
 
-  for(let i=0;i<startOffset;i++){
-    const pad = document.createElement('div'); pad.className='cal-day pad';
-    grid.appendChild(pad);
-  }
-  for(let day=1; day<=daysInMonth; day++){
-    const iso = year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    const el = document.createElement('div');
-    el.className = 'cal-day';
-    if(covered.has(iso)){
-      el.classList.add('in-trip');
-      if(plannedSet.has(iso)) el.classList.add('planned');
-    } else if(excluded.has(iso)){
-      el.classList.add('excluded');
-    }
-    if(pendingExcludedRanges.some(r => iso >= r.start && iso <= r.end)) el.classList.add('excluded');
-    if(iso === today) el.classList.add('today');
-    const used = usedDaysInWindow(trips, iso);
-    const remaining = 90 - used;
-    if(used > 90) el.classList.add('overstay');
-    if(pickStart && iso === pickStart) el.classList.add('pick-start');
-    if(pickEnd && iso === pickEnd) el.classList.add('pick-end');
-    if(pickStart && pickEnd && iso > pickStart && iso < pickEnd) el.classList.add('pick-range');
-    if(pickingExclusion){
-      if(!pickStart || !pickEnd || iso < pickStart || iso > pickEnd){
-        el.classList.add('excl-disabled');
-      } else if(exclPickStart && (iso === exclPickStart || (exclPickEnd && iso >= exclPickStart && iso <= exclPickEnd))){
-        el.classList.add('selecting');
+  const slots = [];
+  for(let i=0;i<startOffset;i++) slots.push(null);
+  for(let day=1; day<=daysInMonth; day++) slots.push(year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0'));
+  while(slots.length % 7 !== 0) slots.push(null);
+
+  for(let w=0; w<slots.length; w+=7){
+    const weekIsos = slots.slice(w, w+7);
+    const weekEl = document.createElement('div');
+    weekEl.className = 'cal-week';
+    weekEl.insertAdjacentHTML('beforeend', renderRibbonRow(weekIsos, trips));
+
+    const dayRow = document.createElement('div');
+    dayRow.className = 'cal-day-row';
+    for(const iso of weekIsos){
+      if(!iso){
+        const pad = document.createElement('div'); pad.className='cal-day pad';
+        dayRow.appendChild(pad);
+        continue;
       }
+      const day = Number(iso.slice(-2));
+      const el = document.createElement('div');
+      el.className = 'cal-day';
+      if(covered.has(iso)){
+        el.classList.add('in-trip');
+        if(plannedSet.has(iso)) el.classList.add('planned');
+      } else if(excluded.has(iso)){
+        el.classList.add('excluded');
+      }
+      if(pendingExcludedRanges.some(r => iso >= r.start && iso <= r.end)) el.classList.add('excluded');
+      if(iso === today) el.classList.add('today');
+      const used = usedDaysInWindow(trips, iso);
+      const remaining = 90 - used;
+      if(used > 90) el.classList.add('overstay');
+      if(pickStart && iso === pickStart) el.classList.add('pick-start');
+      if(pickEnd && iso === pickEnd) el.classList.add('pick-end');
+      if(pickStart && pickEnd && iso > pickStart && iso < pickEnd) el.classList.add('pick-range');
+      if(pickingExclusion){
+        if(!pickStart || !pickEnd || iso < pickStart || iso > pickEnd){
+          el.classList.add('excl-disabled');
+        } else if(exclPickStart && (iso === exclPickStart || (exclPickEnd && iso >= exclPickStart && iso <= exclPickEnd))){
+          el.classList.add('selecting');
+        }
+      }
+      el.innerHTML = `<span class="daynum">${day}</span><span class="rem">${used>90 ? '−'+(used-90) : remaining}</span>`;
+      el.addEventListener('click', ()=>handlePick(iso));
+      dayRow.appendChild(el);
     }
-    el.innerHTML = `<span class="daynum">${day}</span><span class="rem">${used>90 ? '−'+(used-90) : remaining}</span>`;
-    el.addEventListener('click', ()=>handlePick(iso));
-    grid.appendChild(el);
+    weekEl.appendChild(dayRow);
+    grid.appendChild(weekEl);
   }
 }
 

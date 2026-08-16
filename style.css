@@ -541,8 +541,11 @@ details[open] > summary.qc-title-row::after{content:'−';}
 }
 .cal-head button:hover{text-decoration:underline;}
 .cal-month{font-family:var(--font-heading);font-weight:600;font-size:18px;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-.cal-dow{text-align:center;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);padding-bottom:4px;}
+.cal-grid{display:flex;flex-direction:column;}
+.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;}
+.cal-dow{text-align:center;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600);}
+.cal-week + .cal-week{margin-top:3px;}
+.cal-day-row{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .cal-day{
   aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:var(--color-neutral-200);border-radius:6px;font-size:13px;position:relative;cursor:pointer;
@@ -566,6 +569,25 @@ details[open] > summary.qc-title-row::after{content:'−';}
 .cal-day.excluded .rem{opacity:.7;}
 .cal-day.selecting{outline:2px dashed var(--color-text);outline-offset:-2px;font-weight:700;}
 .cal-day.excl-disabled{opacity:.35;pointer-events:none;}
+
+/* — trip ribbons: country label spanning a stay's dates across the top of its week — */
+.ribbon-row{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;height:16px;margin:6px 0 4px;}
+.ribbon{
+  display:flex;align-items:center;justify-content:center;gap:3px;
+  background:var(--color-accent);color:#fff;
+  font-family:var(--font-heading);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;padding:0 5px;
+}
+.ribbon .ribbon-label{overflow:hidden;text-overflow:ellipsis;}
+.ribbon .flag-icon{width:11px;height:8px;flex-shrink:0;border-radius:1px;}
+.ribbon .chev{opacity:.7;font-size:9px;flex-shrink:0;}
+.ribbon.planned{background:var(--color-accent-2);}
+.ribbon.r-left{border-top-left-radius:8px;border-bottom-left-radius:8px;}
+.ribbon.r-right{border-top-right-radius:8px;border-bottom-right-radius:8px;}
+.ribbon-gap{
+  background:repeating-linear-gradient(45deg, var(--color-neutral-300), var(--color-neutral-300) 3px, var(--color-neutral-400) 3px, var(--color-neutral-400) 6px);
+  border-radius:3px;
+}
 
 /* — side-trip exclusions (Calendar log form) — */
 .exclusion-item{
