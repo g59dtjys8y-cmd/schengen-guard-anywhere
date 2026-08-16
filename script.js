@@ -504,15 +504,15 @@ document.getElementById('privacyBackBtn').addEventListener('click', ()=> switchT
 function statusColorVar(used, remaining, exitIsoIsNull){
   if(used > 90 || exitIsoIsNull || remaining <= 7) return 'var(--color-danger)';
   if(remaining <= 14) return 'var(--color-warn)';
-  return 'var(--color-safe)';
+  return 'var(--color-accent)';
 }
 
-// Result-block background tint — healthy gets the safe tint, and warning/danger each
+// Result-block background tint — healthy gets the accent tint, and warning/danger each
 // get their own soft tint matching the days-left ring's colour.
 function statusTintVar(used, remaining, exitIsoIsNull){
   if(used > 90 || exitIsoIsNull || remaining <= 7) return 'var(--color-danger-tint)';
   if(remaining <= 14) return 'var(--color-warn-tint)';
-  return 'var(--color-safe-tint)';
+  return 'var(--color-accent-100)';
 }
 
 function updateRing(remaining, colorVar){
