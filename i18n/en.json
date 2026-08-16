@@ -127,8 +127,6 @@
   "calendar.cancelEdit": "Cancel edit",
   "calendar.missingDates": "Tap an entry date, then an exit date, on the calendar.",
   "calendar.exitBeforeEntry": "Exit date must be on or after the entry date.",
-  "calendar.prevMonth": "← Prev",
-  "calendar.nextMonth": "Next →",
   "calendar.legend.pastActive": "past / active stay",
   "calendar.legend.planned": "planned stay",
   "calendar.legend.overstay": "overstay",

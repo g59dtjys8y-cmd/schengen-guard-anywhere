@@ -169,6 +169,12 @@ function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; 
 function isoOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmt(iso){ const d=toDate(iso); return new Intl.DateTimeFormat(INTL_LOCALE[currentLang] || 'en-GB', {day:'2-digit',month:'short',year:'numeric'}).format(d); }
 function fmtShort(iso){ const d=toDate(iso); return new Intl.DateTimeFormat(INTL_LOCALE[currentLang] || 'en-GB', {day:'2-digit',month:'short'}).format(d); }
+// Short month name (e.g. "Jul") for the month before/after the one a calendar cursor is showing —
+// used on the Prev/Next buttons so they name the month they'll jump to.
+function adjacentMonthLabel(cursor, offset){
+  const d = new Date(cursor.getFullYear(), cursor.getMonth() + offset, 1);
+  return new Intl.DateTimeFormat(INTL_LOCALE[currentLang] || 'en-GB', {month:'short'}).format(d);
+}
 // Wraps a formatted date in a bold span for use inside the Quick check result's innerHTML —
 // day-count phrases (margins, overages) stay plain text and are never passed through this.
 function boldDate(iso){ return `<b class="qc-date">${fmt(iso)}</b>`; }
@@ -945,6 +951,8 @@ function updateChecker(){
 function renderCheckerCalendar(){
   const label = document.getElementById('checkerCalMonthLabel');
   label.textContent = checkerCalCursor.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
+  document.getElementById('checkerPrevMonth').textContent = '← ' + adjacentMonthLabel(checkerCalCursor, -1);
+  document.getElementById('checkerNextMonth').textContent = adjacentMonthLabel(checkerCalCursor, 1) + ' →';
   const grid = document.getElementById('checkerCalGrid');
   grid.innerHTML = '';
 
@@ -1216,6 +1224,8 @@ document.getElementById('checkerSaveBtn').addEventListener('click', async ()=>{
 function renderCalendar(){
   const label = document.getElementById('calMonthLabel');
   label.textContent = calCursor.toLocaleDateString('en-GB',{month:'long', year:'numeric'});
+  document.getElementById('prevMonth').textContent = '← ' + adjacentMonthLabel(calCursor, -1);
+  document.getElementById('nextMonth').textContent = adjacentMonthLabel(calCursor, 1) + ' →';
   const grid = document.getElementById('calGrid');
   grid.innerHTML = '';
 
