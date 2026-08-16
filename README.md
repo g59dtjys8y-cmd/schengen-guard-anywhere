@@ -15,15 +15,17 @@ This is the cloud-synced sibling of [Schengen Guard](https://github.com/g59dtjys
 
 - **Home dashboard** — an arc progress ring shows days left of your rolling 90, with a gold EU-star marker that travels around it and shifts color as the limit approaches. Below it, a "Quick check" card lets you check compliance as of any reference date, and — once you have a trip logged — a "Trip in progress" or "Next trip" panel surfaces the most relevant one.
 - **Tabbed navigation** — Home, Calendar, Trips, and Settings, with a fixed bottom tab bar for quick switching between views.
-- **Safe Trip Checker** — on the Calendar tab, tap a country and candidate entry/exit dates on an embedded calendar to see live whether that stay would keep you compliant and how many days of margin you'd have, *before* you save it, with concrete alternatives if it wouldn't.
-- **Trip list with status** — the Trips tab lists logged stays; a "DONE" stamp once they're in the past (collapsed by default — tap to expand), or an Active or Planned tag otherwise; edit or remove any trip inline.
-- **Side trips** — mark days within a stay as spent outside Schengen (e.g. a UK leg); they're excluded from your 90-day count, shown with a diagonal-hatch pattern on the calendar, a "Side trip: N days" badge on the trip card, and distinctly in the calculation breakdown — add, edit, or remove them from the Trip Checker.
+- **Tap "+" to log a stay** — from Home or the Trips tab, opens a calendar where tapping an entry date then an exit date logs (or edits) a stay, with a side trip markable on the same screen. Every date also shows your remaining day allowance as of that day, with past/active, planned, overstay, and excluded days visually distinguished.
+- **Live compliance preview** — as you pick entry/exit dates, immediate feedback shows whether that stay would keep you compliant and how many days of margin you'd have, *before* you save it, with concrete alternate-date suggestions if it wouldn't.
+- **Trip list with status** — the Trips tab lists logged stays behind a "+" to add a new one; a "DONE" stamp once they're in the past (collapsed by default — tap to expand), or an Active or Planned tag otherwise; edit or remove any trip inline.
+- **Side trips** — mark days within a stay as spent outside Schengen (e.g. a UK leg); they're excluded from your 90-day count, shown with a diagonal-hatch pattern on the calendar, a "Side trip: N days" badge on the trip card, and distinctly in the calculation breakdown — add, edit, or remove them right on the Log/Edit stay screen.
 - **"How is this calculated?"** — a day-by-day breakdown of the rolling 180-day window behind any number, with consecutive same-status days collapsed into readable date ranges.
-- **One calendar for everything** — the same tap-an-entry-date-then-an-exit-date interaction logs or edits a stay, drives the Safe Trip Checker, and marks a side trip. Every date also shows your remaining day allowance as of that day, with past/active, planned, overstay, and excluded days visually distinguished.
+- **Year & History views** — on the Calendar tab, browse the whole year at a glance (tap any month for its day-by-day breakdown) or track your rolling 180-day trend across the past 12 months in a chart.
+- **Passport control** — a per-trip view of the rolling 180-day window for a chosen date, handy to show a border official alongside your passport stamps.
 - **Overstay warnings & overlap detection** — flagged directly against the trip responsible, with the exact date and running total.
 - **CSV / print export** — for handing trip history to a border official or visa office, separate from the JSON backup.
 - **Notification thresholds** — opt in (from Settings) to a browser notification when your days remaining hits 14, 7, or 3.
-- **Light, dark & auto themes**, and **English / Chinese / Japanese** language support (UI fully translated in English; zh/ja ship as a framework with English fallback pending real translations) — both are per-device preferences, not synced.
+- **Light, dark & auto themes** — a per-device preference, not synced.
 - **Account sync via Supabase** — sign in with email/password; your trips are stored in a Supabase Postgres database tied to your account, scoped by Row Level Security, and available on every device you sign into. You're automatically signed out if the app hasn't been opened in 1 day.
 - **JSON export/import** — a supplementary local backup and account-to-account data-migration tool, not required for normal use since your account already syncs everything.
 - **Installable app (PWA)** — add it to your phone's home screen; the app shell caches for fast loads, though trip data itself needs a connection to load or save.
@@ -47,7 +49,6 @@ This is the cloud-synced sibling of [Schengen Guard](https://github.com/g59dtjys
 | `manifest.json` | PWA metadata (name, icons, theme colors) |
 | `sw.js` | Service worker for app-shell offline fallback and installability |
 | `icon-192.png` / `icon-512.png` | App icons |
-| `i18n/*.json` | Per-locale UI strings (`en` complete; `zh`/`ja` are placeholders with English fallback) |
 | `fonts/source-serif-4/` | Self-hosted font files + OFL license |
 
 ## Running it yourself / setting up your own database
