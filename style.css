@@ -403,6 +403,7 @@ details[open] > summary.qc-title-row::after{content:'−';}
 .qc-field-input{
   border:none;background:transparent;padding:0;min-height:auto;width:auto;
   font-size:15px;font-weight:600;color:var(--color-text);text-align:right;
+  line-height:20px;
 }
 .qc-field-row:focus-within .qc-field-input{color:var(--color-accent-700);}
 .qc-today-pill{
