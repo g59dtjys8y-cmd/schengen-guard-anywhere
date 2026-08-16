@@ -441,19 +441,6 @@ details[open] > summary.qc-title-row::after{content:'−';}
 .warn-icon{color:var(--color-accent-2-700);font-weight:700;margin-left:4px;cursor:help;}
 .empty-note{color:var(--color-neutral-600);font-style:italic;font-size:13.5px;padding:16px 0;text-align:center;}
 
-/* — collapsed (past) trip rows — */
-.trip-row-collapsible{padding:0;}
-.trip-row-summary{
-  display:flex;flex-direction:row;align-items:center;gap:14px;padding:14px 16px;
-  cursor:pointer;list-style:none;
-}
-.trip-row-summary::-webkit-details-marker{display:none;}
-.trip-row-summary::after{content:'+';font-size:18px;color:var(--color-neutral-600);flex-shrink:0;line-height:1;}
-.trip-row-collapsible[open] .trip-row-summary::after{content:'−';}
-.trip-row-details{padding:0 16px 14px 74px;}
-.trip-row-details .row-actions{display:flex;gap:14px;}
-.trip-row-details .row-actions button{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;min-height:auto;}
-
 /* — safe trip checker — */
 .safe-trip-checker{border-left:6px solid var(--color-accent);}
 
