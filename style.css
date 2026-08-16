@@ -62,7 +62,14 @@
   --color-accent-2-700:#aa0b56;
   --color-accent-2-800:#790e3d;
 
+  --color-planned:#7c3aed;
+
   --color-process-yellow:#edbb00;
+
+  --color-warn:#92400e;
+  --color-warn-tint:#fdecc8;
+  --color-danger:#b91c1c;
+  --color-danger-tint:#fce4e4;
 
   --font-heading:"Source Serif 4", Georgia, serif;
   --font-body:"Source Serif 4", Georgia, serif;
@@ -133,6 +140,13 @@
     --color-accent-2-700:#ff8bb9;
     --color-accent-2-800:#ffb1cf;
 
+    --color-planned:#8b5cf6;
+
+    --color-warn:#f2b84d;
+    --color-warn-tint:#3a2a10;
+    --color-danger:#ff6b60;
+    --color-danger-tint:#3a1512;
+
     --shadow-sm:0 1px 2px rgba(0,0,0,.4);
     --shadow-md:0 3px 10px rgba(0,0,0,.5);
 
@@ -174,6 +188,13 @@
   --color-accent-2-600:#ff6ba8;
   --color-accent-2-700:#ff8bb9;
   --color-accent-2-800:#ffb1cf;
+
+  --color-planned:#8b5cf6;
+
+  --color-warn:#f2b84d;
+  --color-warn-tint:#3a2a10;
+  --color-danger:#ff6b60;
+  --color-danger-tint:#3a1512;
 
   --shadow-sm:0 1px 2px rgba(0,0,0,.4);
   --shadow-md:0 3px 10px rgba(0,0,0,.5);
@@ -560,8 +581,8 @@ details[open] > summary.qc-title-row::after{content:'−';}
 .cal-day.today{background:var(--color-accent-200);border:2px solid var(--color-accent);color:var(--color-accent-800);}
 .cal-day.in-trip{background:var(--color-accent);color:#fff;}
 .cal-day.in-trip .rem{color:#fff;opacity:.85;}
-.cal-day.in-trip.planned{background:var(--color-accent-2);}
-.cal-day.overstay{background:var(--color-accent-2-700)!important;color:#fff!important;}
+.cal-day.in-trip.planned{background:var(--color-planned);}
+.cal-day.overstay{background:var(--color-accent-2)!important;color:#fff!important;}
 .cal-day.pick-range{background:var(--color-accent-100);}
 .cal-day.pick-start,.cal-day.pick-end{outline:2px dashed var(--color-accent);outline-offset:-2px;font-weight:700;}
 .cal-day.excluded{
@@ -583,7 +604,7 @@ details[open] > summary.qc-title-row::after{content:'−';}
 .ribbon .ribbon-label{overflow:hidden;text-overflow:ellipsis;}
 .ribbon .flag-icon{width:11px;height:8px;flex-shrink:0;border-radius:1px;}
 .ribbon .chev{opacity:.7;font-size:9px;flex-shrink:0;}
-.ribbon.planned{background:var(--color-accent-2);}
+.ribbon.planned{background:var(--color-planned);}
 .ribbon.r-left{border-top-left-radius:8px;border-bottom-left-radius:8px;}
 .ribbon.r-right{border-top-right-radius:8px;border-bottom-right-radius:8px;}
 .ribbon-gap{
@@ -610,6 +631,62 @@ details[open] > summary.qc-title-row::after{content:'−';}
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:11px;color:var(--color-neutral-700);}
 .legend span{display:inline-flex;align-items:center;gap:6px;}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+
+/* — Calendar card mode toggle (Month / Year / History) — */
+.mode-toggle{display:inline-flex;background:var(--color-neutral-200);border-radius:20px;padding:3px;gap:2px;margin-top:12px;}
+.mode-toggle button{
+  border:none;background:none;font-family:var(--font-heading);font-size:12.5px;font-weight:600;
+  padding:6px 16px;border-radius:16px;color:var(--color-neutral-700);cursor:pointer;min-height:auto;
+}
+.mode-toggle button.active{background:var(--color-surface);color:var(--color-accent-700);box-shadow:var(--shadow-sm);}
+
+/* — Year view: twelve mini month grids — */
+.year-stat{font-family:var(--font-heading);font-size:13px;color:var(--color-neutral-700);margin-top:12px;}
+.year-stat strong{color:var(--color-text);font-size:15px;}
+.year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
+.mini-month{background:var(--color-bg);border-radius:8px;padding:6px 5px;cursor:pointer;transition:transform 100ms ease;}
+.mini-month:hover{transform:translateY(-1px);}
+.mini-month-label{
+  font-family:var(--font-heading);font-size:10px;font-weight:700;text-align:center;
+  color:var(--color-neutral-700);margin-bottom:4px;letter-spacing:.02em;
+}
+.mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1.5px;}
+.myd{
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  font-size:6px;border-radius:1.5px;background:var(--color-neutral-200);color:var(--color-neutral-600);
+  font-family:var(--font-heading);font-variant-numeric:tabular-nums;line-height:1;
+}
+.myd.pad{background:transparent;}
+.myd.active{background:var(--color-accent);color:#fff;}
+.myd.planned{background:var(--color-planned);color:#fff;}
+.myd.overstay{background:var(--color-accent-2);color:#fff;}
+.myd.excluded{
+  background:repeating-linear-gradient(45deg, var(--color-neutral-300), var(--color-neutral-300) 1.5px, var(--color-neutral-400) 1.5px, var(--color-neutral-400) 3px);
+  color:var(--color-neutral-800);
+}
+.myd.today{outline:1px solid var(--color-text);outline-offset:-1px;font-weight:700;}
+
+/* — History view: 180-day rolling window trend + monthly checkpoint list — */
+.chart-wrap{margin-top:14px;background:var(--color-bg);border-radius:10px;padding:10px 8px 6px;}
+.chart-wrap svg{width:100%;height:auto;display:block;overflow:visible;}
+.chart-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:10.5px;color:var(--color-neutral-700);}
+.chart-legend span{display:inline-flex;align-items:center;gap:5px;}
+.chart-legend i{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.period-list{display:flex;flex-direction:column;margin-top:14px;}
+.period-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 2px;border-bottom:1px solid var(--color-divider);cursor:pointer;
+}
+.period-row:last-child{border-bottom:none;}
+.period-month{font-family:var(--font-heading);font-size:13px;font-weight:700;color:var(--color-text);}
+.period-range{font-size:10.5px;color:var(--color-neutral-600);margin-top:1px;}
+.period-stat{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.period-used{font-family:var(--font-heading);font-size:15px;font-weight:700;color:var(--color-text);font-variant-numeric:tabular-nums;}
+.period-used span{font-size:10.5px;font-weight:400;color:var(--color-neutral-600);}
+.period-pill{font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+.period-pill.safe{background:var(--color-accent-100);color:var(--color-accent-700);}
+.period-pill.warn{background:var(--color-warn-tint);color:var(--color-warn);}
+.period-pill.danger{background:var(--color-danger-tint);color:var(--color-danger);}
 
 /* — FAQ & terms — */
 .faq-item{border-bottom:1px solid var(--color-divider);padding:8px 0;}
