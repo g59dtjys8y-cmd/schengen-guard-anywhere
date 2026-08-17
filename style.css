@@ -605,8 +605,6 @@ details[open] > summary.qc-title-row::after{content:'−';}
   border:1px dashed var(--color-neutral-600);color:var(--color-neutral-800);
 }
 .cal-day.excluded .rem{opacity:.7;}
-.cal-day.selecting{outline:2px dashed var(--color-text);outline-offset:-2px;font-weight:700;}
-.cal-day.excl-disabled{opacity:.35;pointer-events:none;}
 
 /* — trip ribbons: country label spanning a stay's dates across the top of its week — */
 .ribbon-row{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;height:16px;margin:6px 0 4px;}
