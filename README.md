@@ -5,26 +5,32 @@
   </picture>
 </h1>
 
-A web app for tracking Schengen Area visits and staying compliant with the 90/180-day short-stay rule. Live, installable as an app, and synced to your account — sign in once and your trips follow you to every device.
+A free web app for tracking Schengen Area visits and staying compliant with the 90/180-day short-stay rule. Live, installable as an app.
 
-This is the cloud-synced sibling of [Schengen Guard](https://github.com/g59dtjys8y-cmd/schengen-guard), which shares the same UI and calculation engine but stores trips only on-device (IndexedDB, no account, no server). Pick whichever storage model fits — this repo trades full local privacy for cross-device sync.
+This is one of two identical-feeling sibling apps — same UI, same calculation engine, both free — that differ in exactly one place: where your data lives.
+
+- **This repo (Schengen Guard Anywhere)** — sign in once, and your trips sync across every device via a Supabase-backed account.
+- **[Schengen Guard](https://github.com/g59dtjys8y-cmd/schengen-guard)** — no account, no server; trips are stored only on your device and never leave it.
+
+Pick whichever matches how you want your data handled. Everything else about the app — every feature below — is the same either way.
 
 **Live app:** https://g59dtjys8y-cmd.github.io/schengen-guard-anywhere/ (needs your own Supabase project configured — see below)
 
 ## Features
 
-- **Home dashboard** — an arc progress ring shows days left of your rolling 90, with a gold EU-star marker that travels around it and shifts color as the limit approaches. Below it, a "Quick check" card lets you check compliance as of any reference date, and — once you have a trip logged — a "Trip in progress" or "Next trip" panel surfaces the most relevant one.
+- **Home dashboard** — an arc progress ring shows days left of your rolling 90, with a gold EU-star marker that travels around it and shifts color as the limit approaches. Below it, a "Quick check" card lets you check compliance as of any reference date, and — once you have a trip logged — an "Active trip" or "Next trip" card surfaces the most relevant one, with the country flag and day count front and center, matching how trips are shown on the Trips tab.
 - **Tabbed navigation** — Home, Calendar, Trips, and Settings, with a fixed bottom tab bar for quick switching between views.
-- **Tap "+" to log a stay** — from Home or the Trips tab, opens a calendar where tapping an entry date then an exit date logs (or edits) a stay, with a side trip markable on the same screen. Every date also shows your remaining day allowance as of that day, with past/active, planned, overstay, and excluded days visually distinguished.
+- **Safe Check and Log a Trip** — the Calendar tab leads with this: pick a country, then tap an entry date and an exit date on the calendar to log (or edit) a stay, with a side trip markable on the same screen. Every date also shows your remaining day allowance as of that day, with past/active, planned, overstay, and excluded days visually distinguished.
 - **Live compliance preview** — as you pick entry/exit dates, immediate feedback shows whether that stay would keep you compliant and how many days of margin you'd have, *before* you save it, with concrete alternate-date suggestions if it wouldn't.
-- **Trip list with status** — the Trips tab lists logged stays behind a "+" to add a new one; a "DONE" stamp once they're in the past (collapsed by default — tap to expand), or an Active or Planned tag otherwise; edit or remove any trip inline.
-- **Side trips** — mark days within a stay as spent outside Schengen (e.g. a UK leg); they're excluded from your 90-day count, shown with a diagonal-hatch pattern on the calendar, a "Side trip: N days" badge on the trip card, and distinctly in the calculation breakdown — add, edit, or remove them right on the Log/Edit stay screen.
+- **Full Calendar View** — a collapsed section at the bottom of the Calendar tab (so it stays out of the way of logging a trip): a year-by-year nav, a running total for the year, and a 12-month grid you can share as a passport-stamp-styled recap card.
+- **90/180 overview** — the Trips tab opens with a compliance chart (year nav, a within-limits/14-days-or-fewer trend line, and a month-by-month breakdown), followed by the trip list.
+- **Trip list with status** — a "+" to add a new trip; a "DONE" stamp once a trip is in the past (all completed trips collapse into one expandable group), or an Active or Planned tag otherwise; edit or remove any trip inline; an optional note on every trip.
+- **Side trips** — mark days within a stay as spent outside Schengen (e.g. a UK leg); they're excluded from your 90-day count, shown with a diagonal-hatch pattern on the calendar, a "Side trip: N days" badge on the trip card, and distinctly in the calculation breakdown.
 - **"How is this calculated?"** — a day-by-day breakdown of the rolling 180-day window behind any number, with consecutive same-status days collapsed into readable date ranges.
-- **Year & History views** — on the Calendar tab, browse the whole year at a glance (tap any month for its day-by-day breakdown) or track your rolling 180-day trend across the past 12 months in a chart.
 - **Passport control** — a per-trip view of the rolling 180-day window for a chosen date, handy to show a border official alongside your passport stamps.
 - **Overstay warnings & overlap detection** — flagged directly against the trip responsible, with the exact date and running total.
 - **CSV / print export** — for handing trip history to a border official or visa office, separate from the JSON backup.
-- **Notification thresholds** — opt in (from Settings) to a browser notification when your days remaining hits 14, 7, or 3.
+- **Notification thresholds** — opt in (from Settings) to a browser notification when your days remaining hits 14, 7, or 3, with a warning (amber, "!") or danger (red, "!") icon depending on how close you are.
 - **Light, dark & auto themes** — a per-device preference, not synced.
 - **Account sync via Supabase** — sign in with email/password; your trips are stored in a Supabase Postgres database tied to your account, scoped by Row Level Security, and available on every device you sign into. You're automatically signed out if the app hasn't been opened in 1 day.
 - **JSON export/import** — a supplementary local backup and account-to-account data-migration tool, not required for normal use since your account already syncs everything.
@@ -50,6 +56,21 @@ This is the cloud-synced sibling of [Schengen Guard](https://github.com/g59dtjys
 | `sw.js` | Service worker for app-shell offline fallback and installability |
 | `icon-192.png` / `icon-512.png` | App icons |
 | `fonts/source-serif-4/` | Self-hosted font files + OFL license |
+| `scripts/` | Dev-only checks — see below |
+
+## Dev tooling & checks
+
+There's no build step for the app itself, but a small set of dev-only Node scripts (see `package.json`) catch the most likely ways a push breaks something:
+
+| Command | What it checks |
+|---|---|
+| `npm run check:html` | `index.html` tags are validly nested (a real stack-based check, not just an open/close count) |
+| `npm run check:js` | `script.js` parses (`node --check`) |
+| `npm run check:parity -- <path-to-sibling-checkout>` | Diffs element ids against [Schengen Guard](https://github.com/g59dtjys8y-cmd/schengen-guard) so a feature added to one app and forgotten in the other gets flagged, not shipped silently. Intentional one-sided ids (e.g. the sign-in screen, which only exists here) are documented in `scripts/parity-allowlist.json`. |
+| `npm run smoke` | Boots the app in headless Chromium and confirms every primary tab renders with zero console errors |
+| `npm run check` | Runs the HTML, JS, and smoke checks together |
+
+`.github/workflows/checks.yml` runs all of the above (plus the parity check against a live checkout of the sibling repo) on every push and pull request.
 
 ## Running it yourself / setting up your own database
 
