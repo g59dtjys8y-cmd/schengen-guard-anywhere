@@ -14,6 +14,7 @@ const LAST_BACKUP_KEY = 'schengenGuardAnywhereLastBackupAt';
 const BACKUP_NUDGE_DISMISSED_KEY = 'schengenGuardAnywhereBackupNudgeDismissedAt';
 const DISCLAIMER_ACK_KEY = 'schengenGuardAnywhereDisclaimerAcknowledged';
 const LAST_ACTIVE_KEY = 'schengenGuardAnywhereLastActive';
+const CALENDAR_HINT_SEEN_KEY = 'schengenGuardAnywhereCalendarHintSeen';
 const RING_RADIUS = 99;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
@@ -431,6 +432,10 @@ function showSignedIn(){
   document.getElementById('appBody').style.display = 'block';
   document.getElementById('tabbar').style.display = 'flex';
   document.getElementById('signedInAs').textContent = `Signed in as ${currentUser.email}`;
+  // Shown once per browser, here rather than gating the sign-in form itself — a new
+  // visitor shouldn't have to clear a legal modal before they can even create an
+  // account. The signed-out screen's own copy already covers the essentials.
+  maybeShowFirstRunModal();
 }
 
 function showSignedOut(){
@@ -473,6 +478,24 @@ function switchTab(name){
     btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
   });
   document.getElementById('tabbar').style.display = PRIMARY_TABS.includes(name) ? 'flex' : 'none';
+
+  // First time a user reaches the add-trip screen, open the "how this works" hint
+  // unprompted — the tap-two-dates interaction isn't self-evident, and leaving the
+  // explanation collapsed by default meant most people never saw it. Stays open just
+  // once; later visits default to collapsed like any other <details>.
+  if(name === 'calendar' && localStorage.getItem(CALENDAR_HINT_SEEN_KEY) !== 'true'){
+    document.getElementById('calendarHint').open = true;
+    localStorage.setItem(CALENDAR_HINT_SEEN_KEY, 'true');
+  }
+}
+
+let toastTimer = null;
+function showToast(message){
+  const el = document.getElementById('toast');
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 2200);
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -492,6 +515,7 @@ document.getElementById('tripListAddBtn').addEventListener('click', ()=>{
   switchTab('calendar');
 });
 document.getElementById('faqCard').addEventListener('click', ()=> switchTab('faq'));
+document.getElementById('calendarFaqLink').addEventListener('click', ()=> switchTab('faq'));
 document.getElementById('faqBackBtn').addEventListener('click', ()=> switchTab('settings'));
 document.getElementById('privacyCard').addEventListener('click', ()=> switchTab('privacy'));
 document.getElementById('privacyBackBtn').addEventListener('click', ()=> switchTab('settings'));
@@ -934,6 +958,7 @@ function updateEditStayCompliance(){
   if(!start || !end){
     msgEl.textContent = 'Pick an entry and exit date to check compliance before you save it.';
     saveBtn.disabled = true;
+    document.getElementById('logStayCue').style.display = 'none';
     return;
   }
   if(end < start){
@@ -941,6 +966,7 @@ function updateEditStayCompliance(){
     errEl.textContent = 'Exit date must be on or after the entry date.';
     errEl.style.display = 'block';
     saveBtn.disabled = true;
+    document.getElementById('logStayCue').style.display = 'none';
     return;
   }
 
@@ -978,6 +1004,7 @@ function updateEditStayCompliance(){
     msgEl.innerHTML = `${days}-day stay — <strong style="color:var(--color-safe)">safe, within limits</strong>. ${dayCount(margin)} of margin left on ${fmt(end)}.`;
   }
   saveBtn.disabled = false;
+  document.getElementById('logStayCue').style.display = 'block';
 }
 
 
@@ -1541,6 +1568,7 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   stopEditTrip();
   render();
   switchTab('trips');
+  showToast(wasEditing ? 'Trip updated' : 'Trip saved');
 });
 
 document.getElementById('refDate').addEventListener('change', render);
@@ -2006,7 +2034,6 @@ document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   applyTheme(localStorage.getItem(THEME_KEY) || 'system');
 
   renderEtiasLastChecked();
-  maybeShowFirstRunModal();
 
   document.getElementById('todayTag').textContent = fmt(todayISO());
   document.getElementById('refDate').value = todayISO();
