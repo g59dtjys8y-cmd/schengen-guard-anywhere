@@ -999,7 +999,12 @@ function renderTripRows(){
 function wireTripRowActions(container){
   container.querySelectorAll('[data-action="remove"]').forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
-      await deleteTrip(e.currentTarget.getAttribute('data-id'));
+      try{
+        await deleteTrip(e.currentTarget.getAttribute('data-id'));
+      }catch(err){
+        showToast('Could not delete that trip — please try again.');
+        return;
+      }
       render();
     });
   });
@@ -1026,8 +1031,14 @@ function wireTripRowActions(container){
       const trip = trips.find(t => String(t.id) === String(id));
       if(!trip) return;
       const note = document.getElementById(`noteEditor-${id}`).querySelector('textarea').value.trim();
-      await updateTrip(trip.id, trip.start, trip.end, trip.label, trip.excludedRanges, note);
+      try{
+        await updateTrip(trip.id, trip.start, trip.end, trip.label, trip.excludedRanges, note);
+      }catch(err){
+        showToast('Could not save that note — please try again.');
+        return;
+      }
       render();
+      showToast('Note saved');
     });
   });
 }
