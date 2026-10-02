@@ -59,7 +59,19 @@
 
     <!-- HOME -->
     <div class="screen" id="tab-home">
-      <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <div class="home-top-row">
+        <div class="person-switcher" id="personSwitcher">
+          <button type="button" class="person-chip" id="personSwitcherBtn" aria-haspopup="true" aria-expanded="false" aria-controls="personSwitcherMenu"></button>
+          <div class="card elev-sm person-menu" id="personSwitcherMenu" hidden>
+            <div class="person-menu-list" id="personSwitcherList"></div>
+            <form class="person-add-row" id="personSwitcherAddForm">
+              <input class="input" type="text" id="personSwitcherAddName" maxlength="20" autocomplete="off" data-i18n-placeholder="personNameLabel" data-i18n-aria="personNameLabel">
+              <button type="submit" class="btn btn-secondary" id="personSwitcherAddBtn" data-i18n="addPerson">Add person</button>
+            </form>
+            <p class="note" id="personSwitcherCapNote" style="display:none;" data-i18n="peopleCap">You can add up to 8 people.</p>
+            <div class="form-error" id="personSwitcherError" style="display:none;"></div>
+          </div>
+        </div>
         <button type="button" class="btn btn-primary btn-icon" id="homeAddTripBtn" aria-label="Add a trip">+</button>
       </div>
       <div class="card backup-nudge" id="backupNudge" style="display:none;">
@@ -117,6 +129,8 @@
 
         <p class="disclaimer-footer">Not legal advice — verify with the <a href="https://ec.europa.eu/assets/home/visa-calculator/calculator.htm" target="_blank" rel="noopener">official EU calculator</a></p>
       </div>
+
+      <div class="people-overview" id="peopleOverview" hidden></div>
 
       <div class="card elev-sm" id="activeTripCard" style="display:none; margin-top:14px; cursor:pointer;">
         <div class="qc-title-row" style="margin-bottom:10px;">
@@ -219,6 +233,10 @@
         </details>
       </details>
 
+      <div class="seg-toggle" id="tripScopeToggle" role="group" aria-label="Whose trips to show" hidden>
+        <button type="button" class="seg-btn" id="tripScopePersonBtn" aria-pressed="true"></button>
+        <button type="button" class="seg-btn" id="tripScopeEveryoneBtn" aria-pressed="false" data-i18n="everyone">Everyone</button>
+      </div>
       <div id="tripRows" style="margin-top:14px; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
 
@@ -310,9 +328,11 @@
         <span class="qc-title-rule"></span>
       </div>
 
+      <div class="calendar-person" id="calendarPersonTag" hidden></div>
       <button type="button" class="qc-link" id="calendarFaqLink" style="margin-top:2px;">New to the 90/180 rule? See the FAQ</button>
 
       <div id="verdictBanner" class="verdict-banner" role="status" aria-live="polite" hidden></div>
+      <div id="verdictPeople" class="verdict-people" hidden></div>
       <button type="button" class="qc-link" id="editStayBreakdownBtn" style="display:none; margin-bottom:8px;">How is this calculated?</button>
 
       <p class="card-body" id="editStayMsg" style="margin-top:2px;">Pick an entry and exit date on the calendar to check compliance before you save it.</p>
@@ -351,6 +371,18 @@
           <option>Switzerland</option>
         </select>
       </div>
+
+      <div class="field who-for" id="whoForField" hidden>
+        <span class="who-for-label" id="whoForLabel" data-i18n="whoFor">Who is it for?</span>
+        <div class="chip-row" id="whoForChips" role="group" aria-labelledby="whoForLabel"></div>
+      </div>
+      <div class="form-row" style="margin-top:8px; align-items:center;">
+        <span class="tag tag-outline" id="pickStartLbl">Entry: —</span>
+        <span class="tag tag-outline" id="pickEndLbl">Exit: —</span>
+        <button type="button" class="link-btn" id="clearPickBtn" style="display:none; font-size:12.5px; margin-left:auto;">Clear</button>
+      </div>
+      <input type="hidden" id="tripStart">
+      <input type="hidden" id="tripEnd">
       <div class="form-row" style="margin-top:8px; align-items:center;">
         <span class="tag tag-outline" id="pickStartLbl">Entry: —</span>
         <span class="tag tag-outline" id="pickEndLbl">Exit: —</span>
@@ -482,6 +514,21 @@
         <p class="note">Fires once per threshold per rolling window, based on your logged and planned trips. Requires notification permission and the app open in a tab.</p>
       </div>
 
+      <div class="card" id="peopleCard">
+        <div class="qc-title-row">
+          <span class="qc-title-label"><span class="qc-title-black" data-i18n="peopleTitle">People</span></span>
+          <span class="qc-title-rule"></span>
+        </div>
+        <div class="people-list" id="peopleList"></div>
+        <p class="note" id="peopleLastNote" style="display:none;" data-i18n="lastPersonNote">You need at least one person, so the last one can't be deleted.</p>
+        <form class="person-add-row" id="addPersonForm" style="margin-top:8px;">
+          <input class="input" type="text" id="addPersonName" maxlength="20" autocomplete="off" data-i18n-placeholder="personNameLabel" data-i18n-aria="personNameLabel">
+          <button type="submit" class="btn btn-secondary" id="addPersonBtn" data-i18n="addPerson">Add person</button>
+        </form>
+        <p class="note" id="peopleCapNote" style="display:none;" data-i18n="peopleCap">You can add up to 8 people.</p>
+        <div class="form-error" id="peopleError" style="display:none;"></div>
+      </div>
+
       <div class="card" id="backupCard">
         <div class="qc-title-row">
           <span class="qc-title-label">
@@ -507,6 +554,10 @@
           <span class="qc-title-rule"></span>
         </div>
         <p class="card-body">For handing to a border official or visa office — a human-readable copy, not for re-importing (use Backup for that).</p>
+        <div class="seg-toggle" id="exportScopeToggle" role="group" aria-label="Whose trips to export" hidden>
+          <button type="button" class="seg-btn" id="exportScopePersonBtn" aria-pressed="true"></button>
+          <button type="button" class="seg-btn" id="exportScopeEveryoneBtn" aria-pressed="false" data-i18n="everyone">Everyone</button>
+        </div>
         <button type="button" class="btn btn-secondary btn-block" id="exportCsvBtn">Export as CSV</button>
         <button type="button" class="btn btn-secondary btn-block" id="printTripsBtn">Print / save as PDF</button>
       </div>
@@ -519,6 +570,7 @@
         <p class="card-body">Rolling 180-day window, max 90 days in Schengen — the standard short-stay rule for non-EU visitors. Not immigration advice.</p>
         <p class="card-body">Your trips are stored in your account, not just this device — signing in anywhere gives you access to the same data. This app needs an internet connection to save, load, or sync trips.</p>
         <button type="button" class="btn btn-secondary btn-block danger-link" id="resetBtn">Clear all logged stays</button>
+        <button type="button" class="btn btn-secondary btn-block danger-link" id="resetAllBtn" style="display:none;" data-i18n="clearEveryoneStays">Clear everyone's stays</button>
       </details>
 
       <div class="card elev-sm card-row" id="faqCard" style="cursor:pointer;">
@@ -673,6 +725,24 @@
       <button type="button" class="btn btn-primary btn-block" id="importMergeBtn">Merge with current trips</button>
       <button type="button" class="btn btn-secondary btn-block" id="importReplaceBtn">Replace current trips</button>
       <button type="button" class="link-btn" id="importCancelBtn">Cancel</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="importPersonModal" style="display:none;">
+    <div class="card modal-card">
+      <div class="card-kicker">Restore from backup</div>
+      <p class="card-body" id="importPersonMsg"></p>
+      <div class="stack" id="importPersonList"></div>
+      <button type="button" class="link-btn" id="importPersonCancelBtn">Cancel</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="groupModal" style="display:none;">
+    <div class="card modal-card" role="dialog" aria-modal="true" aria-labelledby="groupModalMsg">
+      <p class="card-body" id="groupModalMsg"></p>
+      <button type="button" class="btn btn-primary btn-block" id="groupAllBtn"></button>
+      <button type="button" class="btn btn-secondary btn-block" id="groupOneBtn"></button>
+      <button type="button" class="link-btn" id="groupCancelBtn">Cancel</button>
     </div>
   </div>
 
