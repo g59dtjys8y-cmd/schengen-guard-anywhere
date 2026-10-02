@@ -6,10 +6,14 @@ const SUPABASE_KEY = 'sb_publishable_JPZoPe7suyMtyV-EEEqD8Q_ksgb0Q9o';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000; // auto sign-out after 1 day of not opening the app
 
-const SCHEMA_VERSION = 1; // bump when the exported JSON trip shape changes
+const SCHEMA_VERSION = 2; // bump when the exported JSON trip shape changes (v2: people + personId/groupId)
 
 const NOTIF_PREFS_KEY = 'schengenGuardAnywhereNotifThresholds';
+// Pre-people single tracker — only read once, to carry its value over to the first person.
 const NOTIF_LAST_FIRED_KEY = 'schengenGuardAnywhereNotifLastFired';
+const NOTIF_LAST_FIRED_BY_PERSON_KEY = 'schengenGuardAnywhereNotifLastFiredByPerson';
+// Active person is a per-device preference (like the theme), so it isn't synced.
+const ACTIVE_PERSON_KEY = 'schengenGuardAnywhereActivePerson';
 const LAST_BACKUP_KEY = 'schengenGuardAnywhereLastBackupAt';
 const BACKUP_NUDGE_DISMISSED_KEY = 'schengenGuardAnywhereBackupNudgeDismissedAt';
 const DISCLAIMER_ACK_KEY = 'schengenGuardAnywhereDisclaimerAcknowledged';
@@ -33,6 +37,96 @@ const COUNTRY_ISO = {
   'Portugal':'pt','Romania':'ro','Slovakia':'sk','Slovenia':'si','Spain':'es','Sweden':'se',
   'Switzerland':'ch'
 };
+// --- People (one person = one travel document; the 90/180 rule runs per person) ---
+
+const MAX_PEOPLE = 8;
+const PERSON_NAME_MAX = 20;
+// Fixed palette — stored by name, drawn from CSS custom properties so each colour has
+// a light and a dark variant. Only ever used as a decorative dot, never as the only signal.
+const PERSON_COLOURS = ['teal','rose','amber','violet','green','blue','orange','slate'];
+
+// Minimal string table for copy added with multiple people. Older copy is still inline;
+// this is the seam a full translation pass (Priority 5) can grow from.
+const STRINGS = {
+  defaultPersonName: 'Me',
+  person: 'person',
+  people: 'people',
+  peopleTitle: 'People',
+  whoFor: 'Who is it for?',
+  everyone: 'Everyone',
+  addPerson: 'Add person',
+  addPersonAria: 'Add a person',
+  personNameLabel: 'Name',
+  switchPerson: 'Switch person, currently {name}',
+  nameRequired: 'Enter a name.',
+  nameTooLong: 'Names can be up to 20 characters.',
+  nameTaken: 'Someone already has that name.',
+  peopleCap: 'You can add up to 8 people.',
+  lastPersonNote: "You need at least one person, so the last one can't be deleted.",
+  peopleNamesNote: 'Names are only used to label trips on this device.',
+  renamePerson: 'Rename {name}',
+  deletePerson: 'Delete {name}',
+  save: 'Save',
+  cancel: 'Cancel',
+  deletePersonConfirm: 'Delete {name} and their {stays}? This cannot be undone.',
+  loggedStay: 'logged stay',
+  loggedStays: 'logged stays',
+  personAdded: '{name} added',
+  personRenamed: 'Name updated',
+  personDeleted: '{name} deleted',
+  personDaysLeft: '{name} has {days} left.',
+  personOverBy: '{name} is {days} over.',
+  overviewDaysLeft: '{days} left',
+  overviewOver: '{days} over',
+  showingDaysFor: "Showing {name}'s days",
+  selectSomeone: 'Pick at least one person.',
+  notSafeFor: 'Not safe for {names}.',
+  safeForEveryone: 'Safe for everyone.',
+  tightestMargin: 'Tightest margin: {name}, {days}.',
+  worstBreach: '{name} would reach 90 days on {date} ({used} of 90 used). Leave by {lastSafe}.',
+  rowSafe: '{days} left on exit',
+  rowOver: 'Over on {date} ({used} of 90)',
+  rowStay: '{days} in Schengen',
+  rowBreakdown: 'How is this calculated?',
+  rowBreakdownAria: 'How is this calculated for {name}?',
+  breakdownFor: 'For {name}. ',
+  noCommonOption: 'No single change works for everyone. Best option for each person:',
+  overlapPeople: 'This overlaps a stay already logged for {names}. Save anyway?',
+  groupEditOne: 'Apply this change to the 1 other person on this trip?',
+  groupEditMany: 'Apply this change to the {count} other people on this trip?',
+  groupDeleteOne: 'This stay is shared with 1 other person.',
+  groupDeleteMany: 'This stay is shared with {count} other people.',
+  applyToEveryone: 'Apply to everyone',
+  removeForEveryone: 'Remove for everyone',
+  onlyName: 'Only {name}',
+  clearPersonStays: "Clear {name}'s stays",
+  clearEveryoneStays: "Clear everyone's stays",
+  clearPersonConfirm: "Clear all of {name}'s logged stays? This cannot be undone.",
+  clearEveryoneConfirm: "Clear everyone's logged stays? This cannot be undone.",
+  countriesSubtitlePerson: '{name}: {count} of {total} Schengen countries stamped',
+  notifPerson: '{name} has {days} left.',
+  importWhichPerson: 'Add these trips to which person?',
+  importOldFile: 'This backup was made before Schengen Guard Anywhere had people, so it has {trips} and no names.',
+  importTooManyPeople: 'This backup would take you over 8 people. Delete someone first, or choose Replace. No changes were made.',
+  importTooManyPeopleReplace: 'This backup has more than 8 people, so it cannot be restored. No changes were made.',
+  importPersonMsg: "{name} has {existing} saved and this backup has {incoming}. Merge them, or replace {name}'s stays?",
+  importMergeIntoPerson: "Merge with {name}'s trips",
+  importReplacePerson: "Replace {name}'s trips",
+  trip: 'trip',
+  tripsWord: 'trips',
+  exportScopePerson: '{name} only',
+  csvPerson: 'Person',
+  passportFor: 'Traveller: {name}'
+};
+function i18n(key, vars){
+  let s = STRINGS[key] !== undefined ? STRINGS[key] : key;
+  if(vars) s = s.replace(/\{(\w+)\}/g, (m, k) => vars[k] !== undefined ? String(vars[k]) : m);
+  return s;
+}
+function countOf(n, singularKey, pluralKey){ return `${n} ${i18n(n === 1 ? singularKey : pluralKey)}`; }
+const listFormatter = ('ListFormat' in Intl) ? new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' }) : null;
+function formatNames(names){ return listFormatter ? listFormatter.format(names) : names.join(', '); }
+
 
 // Decorative flag icon markup for a country name; text label stays the a11y source of truth.
 function flagIconHtml(name){
@@ -85,7 +179,17 @@ function escapeHtml(str){
 }
 
 let currentUser = null;
-let trips = []; // {id, start:'YYYY-MM-DD', end:'YYYY-MM-DD', label, excludedRanges:[{start,end}]}
+// `allTrips` is every stored trip, for every person. `trips` is only the active person's
+// trips — the view almost every screen reads — so the rule engine never sees a mixed list.
+let allTrips = []; // {id, personId, groupId?, start:'YYYY-MM-DD', end:'YYYY-MM-DD', label, excludedRanges:[{start,end}], note}
+let trips = [];
+let people = []; // {id, name, colour} — rows of the travellers table
+let activePersonId = null;
+let selectedPersonIds = new Set(); // "Who is it for?" chips on the Calendar form
+let tripListScope = 'person'; // 'person' | 'everyone' — Trips tab toggle
+let exportScope = 'person'; // 'person' | 'everyone' — CSV/print export
+let pendingImportPeople = null;
+let pendingImportPersonId = null; // v1 backups: which existing person receives the trips
 let calCursor = new Date(); calCursor.setDate(1);
 let pickStart = null, pickEnd = null;
 let editingTripId = null;
@@ -441,41 +545,198 @@ function classifyTrip(t){
   return 'planned';
 }
 
-// --- Supabase storage layer (trips sync to your account, not just this device) ---
+// --- Supabase storage layer (trips and travellers sync to your account, not just this device) ---
 
-// Load this user's trips from Supabase, mapping DB rows to the shape the rest of the app expects
+// The engine only ever gets one person's trips — never pass `allTrips` into it.
+function tripsFor(personId){ return allTrips.filter(t => t.personId === personId); }
+function personById(id){ return people.find(p => p.id === id) || null; }
+function activePerson(){ return personById(activePersonId) || people[0] || null; }
+function personColourVar(colour){
+  return `var(--person-${PERSON_COLOURS.includes(colour) ? colour : PERSON_COLOURS[0]})`;
+}
+function nextFreeColour(list){
+  const used = new Set(list.map(p => p.colour));
+  return PERSON_COLOURS.find(c => !used.has(c)) || PERSON_COLOURS[list.length % PERSON_COLOURS.length];
+}
+function personDotHtml(person){
+  return `<span class="person-dot" style="--pc:${personColourVar(person && person.colour)};" aria-hidden="true"></span>`;
+}
+function personTagHtml(person){
+  if(!person) return '';
+  return `<span class="person-tag">${personDotHtml(person)}${escapeHtml(person.name)}</span>`;
+}
+
+// Returns an error message, or null if the name is fine. `exceptId` lets a rename keep its own name.
+function validatePersonName(name, exceptId, list = people){
+  const trimmed = String(name || '').trim();
+  if(!trimmed) return i18n('nameRequired');
+  if(trimmed.length > PERSON_NAME_MAX) return i18n('nameTooLong');
+  const lower = trimmed.toLocaleLowerCase();
+  if(list.some(p => p.id !== exceptId && p.name.toLocaleLowerCase() === lower)) return i18n('nameTaken');
+  return null;
+}
+
+function travellerRow(person){
+  return { id: person.id, user_id: currentUser.id, name: person.name, colour: person.colour };
+}
+
+async function loadPeople(){
+  if(!currentUser){ people = []; return; }
+  const { data, error } = await db.from('travellers').select('*').order('created_at');
+  if(error) throw error;
+  people = (data || []).map(row => ({ id: row.id, name: row.name, colour: row.colour }));
+}
+
+// Inserts new people (ids are generated here, so callers can map to them straight away).
+async function savePeople(list){
+  if(!list.length) return;
+  const { error } = await db.from('travellers').insert(list.map(travellerRow));
+  if(error) throw error;
+  await loadPeople();
+}
+
+async function addPerson(name){
+  const err = people.length >= MAX_PEOPLE ? i18n('peopleCap') : validatePersonName(name);
+  if(err) throw new Error(err);
+  const person = { id: newId(), name: name.trim(), colour: nextFreeColour(people) };
+  await savePeople([person]);
+  return person;
+}
+
+async function renamePerson(id, name){
+  if(!personById(id)) return;
+  const err = validatePersonName(name, id);
+  if(err) throw new Error(err);
+  const { error } = await db.from('travellers').update({ name: name.trim() }).eq('id', id);
+  if(error) throw error;
+  await loadPeople();
+}
+
+// Deletes a person; their trips go with them (trips.traveller_id is `on delete cascade`).
+// The last person can't go.
+async function deletePerson(id){
+  if(people.length <= 1) return;
+  const { error } = await db.from('travellers').delete().eq('id', id);
+  if(error) throw error;
+  const lastFired = loadNotifLastFired();
+  delete lastFired[id];
+  saveNotifLastFired(lastFired);
+  await loadPeople();
+  if(activePersonId === id) setActivePersonId(people[0].id);
+  await loadTrips();
+  markTripsChanged();
+}
+
+function setActivePersonId(id){
+  activePersonId = id;
+  try{ localStorage.setItem(ACTIVE_PERSON_KEY, id); }catch(e){}
+  trips = tripsFor(id);
+}
+
+// Runs after sign-in, before first render, and is safe to run again: makes sure the account
+// has at least one traveller ("Me"), gives any trip without one to the first traveller, and
+// restores this device's active person. (The SQL migration in the README already does the
+// same for existing data — this covers a brand-new account.)
+async function ensurePeople(){
+  await loadPeople();
+  if(people.length === 0){
+    await savePeople([{ id: newId(), name: i18n('defaultPersonName'), colour: PERSON_COLOURS[0] }]);
+  }
+  const { data, error } = await db.from('trips').select('*').order('start_date');
+  if(error) throw error;
+  const ids = new Set(people.map(p => p.id));
+  const orphanIds = (data || []).filter(row => !ids.has(row.traveller_id)).map(row => row.id);
+  if(orphanIds.length){
+    const { error: updErr } = await db.from('trips').update({ traveller_id: people[0].id }).in('id', orphanIds);
+    if(updErr) throw updErr;
+  }
+  let stored = null;
+  try{ stored = localStorage.getItem(ACTIVE_PERSON_KEY); }catch(e){}
+  activePersonId = personById(stored) ? stored : people[0].id;
+  try{ localStorage.setItem(ACTIVE_PERSON_KEY, activePersonId); }catch(e){}
+  // Carry the pre-people notification tracker over to the first person, once.
+  try{
+    const legacy = localStorage.getItem(NOTIF_LAST_FIRED_KEY);
+    if(legacy !== null){
+      const map = loadNotifLastFired();
+      if(map[people[0].id] === undefined) map[people[0].id] = Number(legacy);
+      saveNotifLastFired(map);
+      localStorage.removeItem(NOTIF_LAST_FIRED_KEY);
+    }
+  }catch(e){}
+}
+
+// People first, then trips — everything a signed-in render needs.
+async function loadAccount(){
+  await ensurePeople();
+  selectedPersonIds = new Set([activePersonId]);
+  await loadTrips();
+}
+
+function rowToTrip(row){
+  const trip = {
+    id: row.id, personId: row.traveller_id, start: row.start_date, end: row.end_date, label: row.country,
+    excludedRanges: row.excluded_ranges || [], note: row.note || ''
+  };
+  if(row.group_id) trip.groupId = row.group_id;
+  return trip;
+}
+function tripToRow(trip){
+  return {
+    id: trip.id, traveller_id: trip.personId, group_id: trip.groupId || null,
+    start_date: trip.start, end_date: trip.end, country: trip.label,
+    excluded_ranges: trip.excludedRanges || [], note: trip.note || ''
+  };
+}
+
+// Load this user's trips from Supabase into `allTrips`, and the active person's into `trips`
 async function loadTrips(){
-  if(!currentUser){ trips = []; return; }
+  if(!currentUser){ allTrips = []; trips = []; return; }
   try{
     const { data, error } = await db.from('trips').select('*').order('start_date');
     if(error) throw error;
-    trips = (data || []).map(row => ({
-      id: row.id, start: row.start_date, end: row.end_date, label: row.country,
-      excludedRanges: row.excluded_ranges || [], note: row.note || ''
-    }));
+    allTrips = (data || []).map(rowToTrip);
   }catch(e){
-    trips = [];
+    allTrips = [];
   }
+  trips = tripsFor(activePersonId);
+}
+
+function buildTrip(personId, start, end, label, excludedRanges, note, groupId){
+  const trip = { id: newId(), personId, start, end, label, excludedRanges: (excludedRanges || []).map(r => ({ ...r })), note: note || '' };
+  if(groupId) trip.groupId = groupId;
+  return trip;
 }
 
 // Insert one trip into Supabase, then reload so ids/ordering stay in sync with the database
-async function insertTrip(start, end, label, excludedRanges, note){
-  const { error } = await db.from('trips').insert([{
-    start_date: start, end_date: end, country: label, excluded_ranges: excludedRanges || [], note: note || ''
-  }]);
+async function insertTrip(personId, start, end, label, excludedRanges, note, groupId){
+  const { error } = await db.from('trips').insert([tripToRow(buildTrip(personId, start, end, label, excludedRanges, note, groupId))]);
   if(error) throw error;
   await loadTrips();
   markTripsChanged();
 }
 
-// Update one existing trip's dates/country/exclusions/note, then reload
-async function updateTrip(id, start, end, label, excludedRanges, note){
-  const existing = trips.find(t => t.id === id);
-  const { error } = await db.from('trips').update({
+// One identical stay for several people, inserted in one statement and sharing a new group_id.
+async function insertTripForPeople(personIds, start, end, label, excludedRanges){
+  if(personIds.length === 1) return insertTrip(personIds[0], start, end, label, excludedRanges);
+  const groupId = newId();
+  const { error } = await db.from('trips').insert(personIds.map(pid => tripToRow(buildTrip(pid, start, end, label, excludedRanges, '', groupId))));
+  if(error) throw error;
+  await loadTrips();
+  markTripsChanged();
+}
+
+// Update one existing trip's dates/country/exclusions/note, then reload.
+// `groupId`: undefined keeps the trip's current group, null takes it out of its group.
+async function updateTrip(id, start, end, label, excludedRanges, note, groupId){
+  const existing = allTrips.find(t => t.id === id);
+  const fields = {
     start_date: start, end_date: end, country: label,
     excluded_ranges: excludedRanges || (existing && existing.excludedRanges) || [],
     note: note !== undefined ? note : ((existing && existing.note) || '')
-  }).eq('id', id);
+  };
+  if(groupId !== undefined) fields.group_id = groupId;
+  const { error } = await db.from('trips').update(fields).eq('id', id);
   if(error) throw error;
   await loadTrips();
   markTripsChanged();
@@ -489,12 +750,21 @@ async function deleteTrip(id){
   markTripsChanged();
 }
 
-// Delete every trip belonging to the current user
-async function deleteAllTrips(){
-  if(!currentUser) return;
-  const { error } = await db.from('trips').delete().eq('user_id', currentUser.id);
+async function deleteTrips(ids){
+  if(!ids.length) return;
+  const { error } = await db.from('trips').delete().in('id', ids);
   if(error) throw error;
-  trips = [];
+  await loadTrips();
+  markTripsChanged();
+}
+
+// With a person id, clears only that person's trips; with none, clears every trip on the account.
+async function deleteAllTrips(personId){
+  if(!currentUser) return;
+  const query = db.from('trips').delete();
+  const { error } = personId ? await query.eq('traveller_id', personId) : await query.eq('user_id', currentUser.id);
+  if(error) throw error;
+  await loadTrips();
   markTripsChanged();
 }
 
@@ -522,10 +792,14 @@ function showSignedOut(){
 // Schengen zone today: 90 minus days already used in the rolling 180-day window
 // ending today. Independent of whatever date the "Check as of" field is scrubbed to,
 // and naturally changes day to day as old covered days age out of that window.
+function realDaysLeft(personId){
+  return Math.max(0, 90 - usedDaysInWindow(tripsFor(personId), todayISO()));
+}
+
+// The badge shows the lowest days-left across everyone — the one number that matters most.
 function updateAppBadge(){
-  if(!('setAppBadge' in navigator)) return;
-  const used = usedDaysInWindow(trips, todayISO());
-  const daysLeft = Math.max(0, 90 - used);
+  if(!('setAppBadge' in navigator) || !people.length) return;
+  const daysLeft = Math.min(...people.map(p => realDaysLeft(p.id)));
   try{ navigator.setAppBadge(daysLeft).catch(()=>{}); }catch(e){}
 }
 function clearAppBadge(){
@@ -676,6 +950,313 @@ function render(){
   updateAppBadge();
   checkNotifications();
   renderBackupNudge();
+  renderPeopleUI();
+  renderWhoForChips();
+  updateEditStayCompliance();
+}
+
+// --- People: Home switcher, overview strip, Settings card, Trips/Export toggles ---
+
+// Copy from the string table that lives in static markup.
+function applyStaticStrings(){
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = i18n(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = i18n(el.getAttribute('data-i18n-placeholder')); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', i18n(el.getAttribute('data-i18n-aria'))); });
+}
+
+function switchActivePerson(id){
+  if(!personById(id) || id === activePersonId) return;
+  // An in-progress edit belongs to the previous person's trip — drop it rather than
+  // checking it against the wrong person's history.
+  if(editingTripId !== null) stopEditTrip();
+  setActivePersonId(id);
+  selectedPersonIds = new Set([id]);
+  render();
+}
+
+function renderPeopleUI(){
+  renderPersonSwitcher();
+  renderPeopleOverview();
+  renderPeopleCard();
+  renderTripScopeToggle();
+  renderExportScopeToggle();
+  renderResetButtons();
+  renderCalendarPersonTag();
+}
+
+function renderPersonSwitcher(){
+  const person = activePerson();
+  if(!person) return;
+  const btn = document.getElementById('personSwitcherBtn');
+  const multi = people.length > 1;
+  btn.innerHTML = `${personDotHtml(person)}<span class="person-chip-name">${escapeHtml(person.name)}</span>${multi ? '<span class="person-chip-caret" aria-hidden="true">▾</span>' : ''}`;
+  btn.setAttribute('aria-label', i18n('switchPerson', { name: person.name }));
+  btn.classList.toggle('quiet', !multi);
+
+  const list = document.getElementById('personSwitcherList');
+  list.innerHTML = '';
+  if(multi){
+    for(const p of people){
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'person-menu-item';
+      item.setAttribute('aria-pressed', String(p.id === activePersonId));
+      item.innerHTML = `${personDotHtml(p)}<span>${escapeHtml(p.name)}</span>${p.id === activePersonId ? '<span class="person-menu-tick" aria-hidden="true">✓</span>' : ''}`;
+      item.addEventListener('click', ()=>{
+        closePersonSwitcher();
+        switchActivePerson(p.id);
+      });
+      list.appendChild(item);
+    }
+  }
+  const atCap = people.length >= MAX_PEOPLE;
+  document.getElementById('personSwitcherAddForm').style.display = atCap ? 'none' : '';
+  document.getElementById('personSwitcherCapNote').style.display = atCap ? '' : 'none';
+}
+
+function openPersonSwitcher(){
+  const menu = document.getElementById('personSwitcherMenu');
+  menu.hidden = false;
+  document.getElementById('personSwitcherBtn').setAttribute('aria-expanded', 'true');
+  document.getElementById('personSwitcherError').style.display = 'none';
+  const first = menu.querySelector('.person-menu-item[aria-pressed="true"]') || document.getElementById('personSwitcherAddName');
+  if(first) first.focus();
+}
+function closePersonSwitcher(){
+  const menu = document.getElementById('personSwitcherMenu');
+  if(menu.hidden) return;
+  menu.hidden = true;
+  document.getElementById('personSwitcherBtn').setAttribute('aria-expanded', 'false');
+}
+document.getElementById('personSwitcherBtn').addEventListener('click', (e)=>{
+  e.stopPropagation();
+  if(document.getElementById('personSwitcherMenu').hidden) openPersonSwitcher();
+  else closePersonSwitcher();
+});
+document.addEventListener('click', (e)=>{
+  if(!document.getElementById('personSwitcher').contains(e.target)) closePersonSwitcher();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && !document.getElementById('personSwitcherMenu').hidden){
+    closePersonSwitcher();
+    document.getElementById('personSwitcherBtn').focus();
+  }
+});
+
+// Shared by the Home switcher and the Settings card: validates, saves, reports.
+async function handleAddPerson(inputEl, errEl, makeActive){
+  errEl.style.display = 'none';
+  let person;
+  try{
+    person = await addPerson(inputEl.value);
+  }catch(err){
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  inputEl.value = '';
+  if(makeActive){
+    closePersonSwitcher();
+    switchActivePerson(person.id);
+  } else {
+    render();
+  }
+  showToast(i18n('personAdded', { name: person.name }));
+}
+document.getElementById('personSwitcherAddForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  handleAddPerson(document.getElementById('personSwitcherAddName'), document.getElementById('personSwitcherError'), true);
+});
+
+// Same healthy / warning / danger split as the ring, as of the "Check as of" date.
+function personStatus(personId, refISO){
+  const list = tripsFor(personId);
+  const used = usedDaysInWindow(list, refISO);
+  const remaining = Math.max(0, 90 - used);
+  return { used, remaining, colorVar: statusColorVar(used, remaining, false) };
+}
+
+function renderPeopleOverview(){
+  const strip = document.getElementById('peopleOverview');
+  if(people.length < 2){ strip.hidden = true; strip.innerHTML = ''; return; }
+  strip.hidden = false;
+  const refISO = document.getElementById('refDate').value || todayISO();
+  strip.innerHTML = '';
+  for(const p of people){
+    const st = personStatus(p.id, refISO);
+    const over = st.used > 90;
+    const figure = over ? i18n('overviewOver', { days: dayCount(st.used - 90) }) : i18n('overviewDaysLeft', { days: dayCount(st.remaining) });
+    const sentence = over ? i18n('personOverBy', { name: p.name, days: dayCount(st.used - 90) }) : i18n('personDaysLeft', { name: p.name, days: dayCount(st.remaining) });
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'people-overview-row' + (p.id === activePersonId ? ' active' : '');
+    row.setAttribute('aria-label', sentence);
+    if(p.id === activePersonId) row.setAttribute('aria-current', 'true');
+    row.innerHTML = `<span class="people-overview-name">${personDotHtml(p)}${escapeHtml(p.name)}</span><span class="people-overview-days" style="color:${st.colorVar};">${st.colorVar !== statusColorVar(0, 90, false) ? '<span aria-hidden="true">&#9888;</span> ' : ''}${escapeHtml(figure)}</span>`;
+    row.addEventListener('click', ()=> switchActivePerson(p.id));
+    strip.appendChild(row);
+  }
+}
+
+let renamingPersonId = null;
+function renderPeopleCard(){
+  const list = document.getElementById('peopleList');
+  list.innerHTML = '';
+  const onlyOne = people.length <= 1;
+  for(const p of people){
+    const row = document.createElement('div');
+    row.className = 'people-row';
+    if(renamingPersonId === p.id){
+      row.classList.add('renaming');
+      row.innerHTML = `
+        <form class="person-add-row people-rename-form">
+          <input class="input" maxlength="${PERSON_NAME_MAX}" aria-label="${escapeHtml(i18n('personNameLabel'))}" value="${escapeHtml(p.name)}">
+          <button type="submit" class="btn btn-secondary">${escapeHtml(i18n('save'))}</button>
+          <button type="button" class="link-btn" data-action="cancel-rename">${escapeHtml(i18n('cancel'))}</button>
+        </form>
+        <div class="form-error" style="display:none;"></div>`;
+      const form = row.querySelector('form');
+      const input = form.querySelector('input');
+      const errEl = row.querySelector('.form-error');
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        try{
+          await renamePerson(p.id, input.value);
+        }catch(err){
+          errEl.textContent = err.message;
+          errEl.style.display = 'block';
+          return;
+        }
+        renamingPersonId = null;
+        render();
+        showToast(i18n('personRenamed'));
+      });
+      row.querySelector('[data-action="cancel-rename"]').addEventListener('click', ()=>{
+        renamingPersonId = null;
+        renderPeopleCard();
+      });
+      list.appendChild(row);
+      setTimeout(()=> input.focus(), 0);
+      continue;
+    }
+    const stays = tripsFor(p.id).length;
+    row.innerHTML = `
+      <span class="people-row-name">${personDotHtml(p)}<span>${escapeHtml(p.name)}</span></span>
+      <span class="people-row-count">${escapeHtml(countOf(stays, 'loggedStay', 'loggedStays'))}</span>
+      <span class="row-actions row-actions-icons">
+        <button type="button" class="link-btn" data-action="rename" aria-label="${escapeHtml(i18n('renamePerson', { name: p.name }))}">${PEN_ICON_SVG}</button>
+        <button type="button" class="link-btn danger-link" data-action="delete" aria-label="${escapeHtml(i18n('deletePerson', { name: p.name }))}" ${onlyOne ? 'disabled' : ''}>${BIN_ICON_SVG}</button>
+      </span>`;
+    row.querySelector('[data-action="rename"]').addEventListener('click', ()=>{
+      renamingPersonId = p.id;
+      renderPeopleCard();
+    });
+    row.querySelector('[data-action="delete"]').addEventListener('click', async ()=>{
+      if(people.length <= 1) return;
+      const message = i18n('deletePersonConfirm', { name: p.name, stays: countOf(stays, 'loggedStay', 'loggedStays') });
+      if(!confirm(message)) return;
+      try{
+        await deletePerson(p.id);
+      }catch(err){
+        showToast('Could not delete that person — please try again.');
+        return;
+      }
+      selectedPersonIds = new Set([activePersonId]);
+      render();
+      showToast(i18n('personDeleted', { name: p.name }));
+    });
+    list.appendChild(row);
+  }
+  document.getElementById('peopleLastNote').style.display = onlyOne ? '' : 'none';
+  const atCap = people.length >= MAX_PEOPLE;
+  document.getElementById('addPersonForm').style.display = atCap ? 'none' : '';
+  document.getElementById('peopleCapNote').style.display = atCap ? '' : 'none';
+}
+document.getElementById('addPersonForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  handleAddPerson(document.getElementById('addPersonName'), document.getElementById('peopleError'), false);
+});
+
+// Two-button "[Name] / Everyone" toggle, shared by the Trips tab and the Export card.
+function renderScopeToggle(wrapId, personBtnId, everyoneBtnId, scope){
+  const wrap = document.getElementById(wrapId);
+  wrap.hidden = people.length < 2;
+  const person = activePerson();
+  document.getElementById(personBtnId).textContent = person ? person.name : '';
+  document.getElementById(personBtnId).setAttribute('aria-pressed', String(scope !== 'everyone'));
+  document.getElementById(everyoneBtnId).setAttribute('aria-pressed', String(scope === 'everyone'));
+}
+function renderTripScopeToggle(){
+  if(people.length < 2) tripListScope = 'person';
+  renderScopeToggle('tripScopeToggle', 'tripScopePersonBtn', 'tripScopeEveryoneBtn', tripListScope);
+}
+function renderExportScopeToggle(){
+  if(people.length < 2) exportScope = 'person';
+  renderScopeToggle('exportScopeToggle', 'exportScopePersonBtn', 'exportScopeEveryoneBtn', exportScope);
+}
+document.getElementById('tripScopePersonBtn').addEventListener('click', ()=>{ tripListScope = 'person'; renderTripScopeToggle(); renderTripRows(); });
+document.getElementById('tripScopeEveryoneBtn').addEventListener('click', ()=>{ tripListScope = 'everyone'; renderTripScopeToggle(); renderTripRows(); });
+document.getElementById('exportScopePersonBtn').addEventListener('click', ()=>{ exportScope = 'person'; renderExportScopeToggle(); });
+document.getElementById('exportScopeEveryoneBtn').addEventListener('click', ()=>{ exportScope = 'everyone'; renderExportScopeToggle(); });
+
+function renderResetButtons(){
+  const person = activePerson();
+  const multi = people.length > 1;
+  document.getElementById('resetBtn').textContent = multi && person ? i18n('clearPersonStays', { name: person.name }) : 'Clear all logged stays';
+  document.getElementById('resetAllBtn').style.display = multi ? '' : 'none';
+}
+
+function renderCalendarPersonTag(){
+  const el = document.getElementById('calendarPersonTag');
+  const person = activePerson();
+  if(people.length < 2 || !person){ el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = `${personDotHtml(person)}${escapeHtml(i18n('showingDaysFor', { name: person.name }))}`;
+}
+
+// --- "Who is it for?" chips on the Calendar form ---
+
+function selectedPeople(){
+  return people.filter(p => selectedPersonIds.has(p.id));
+}
+
+function renderWhoForChips(){
+  const field = document.getElementById('whoForField');
+  // Drop anyone who no longer exists; default to the active person.
+  selectedPersonIds = new Set([...selectedPersonIds].filter(id => personById(id)));
+  if(people.length < 2){
+    selectedPersonIds = new Set(people.length ? [activePerson().id] : []);
+  }
+  // Editing keeps the trip's owner — changing who a trip is for is delete-and-re-add.
+  if(people.length < 2 || editingTripId !== null){ field.hidden = true; return; }
+  field.hidden = false;
+  const chips = document.getElementById('whoForChips');
+  chips.innerHTML = '';
+  const chip = (label, pressed, onClick, person) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'who-chip';
+    b.setAttribute('aria-pressed', String(pressed));
+    b.innerHTML = `<span class="who-chip-tick" aria-hidden="true">${pressed ? '✓' : ''}</span>${person ? personDotHtml(person) : ''}<span class="who-chip-name">${escapeHtml(label)}</span>`;
+    b.addEventListener('click', onClick);
+    chips.appendChild(b);
+  };
+  if(people.length >= 3){
+    const allSelected = people.every(p => selectedPersonIds.has(p.id));
+    chip(i18n('everyone'), allSelected, ()=>{
+      selectedPersonIds = allSelected ? new Set([activePersonId]) : new Set(people.map(p => p.id));
+      renderWhoForChips();
+      updateEditStayCompliance();
+    });
+  }
+  for(const p of people){
+    chip(p.name, selectedPersonIds.has(p.id), ()=>{
+      if(selectedPersonIds.has(p.id)) selectedPersonIds.delete(p.id);
+      else selectedPersonIds.add(p.id);
+      renderWhoForChips();
+      updateEditStayCompliance();
+    }, p);
+  }
 }
 
 // Soonest trip that hasn't finished yet (ongoing or upcoming)
@@ -854,8 +1435,10 @@ function renderCountriesCard(){
 
 function renderCountries(){
   const visited = visitedCountries();
-  document.getElementById('countriesSubtitle').textContent =
-    `${visited.size} of ${ALL_COUNTRIES.length} Schengen countries stamped`;
+  const person = activePerson();
+  document.getElementById('countriesSubtitle').textContent = (people.length > 1 && person)
+    ? i18n('countriesSubtitlePerson', { name: person.name, count: visited.size, total: ALL_COUNTRIES.length })
+    : `${visited.size} of ${ALL_COUNTRIES.length} Schengen countries stamped`;
 
   const grid = document.getElementById('countriesGrid');
   grid.innerHTML = '';
@@ -886,9 +1469,10 @@ function renderCountries(){
 
 // --- Trips list ---
 
-function buildTripRow(trip, status){
+// `showPerson` adds the owner's tag — used by the Trips tab's Everyone view.
+function buildTripRow(trip, status, showPerson){
   const days = Math.round((toDate(trip.end) - toDate(trip.start))/86400000) + 1;
-  const overstay = tripOverstayInfo(trips, trip, 90);
+  const overstay = tripOverstayInfo(tripsFor(trip.personId), trip, 90);
   const warnIcon = overstay
     ? `<span class="warn-icon" title="This stay tips you over the 90-day limit on ${fmt(overstay.date)} (${overstay.used} of 90 used)">&#9888;</span>`
     : '';
@@ -921,6 +1505,7 @@ function buildTripRow(trip, status){
     <div class="trip-info">
       <div class="country">${country}</div>
       <div class="dates">${dates}</div>
+      ${showPerson ? `<div class="trip-person">${personTagHtml(personById(trip.personId))}</div>` : ''}
       ${exclNote}
       ${noteHtml}
       <div class="note-editor" id="noteEditor-${trip.id}" style="display:none; margin-top:6px;">
@@ -944,22 +1529,28 @@ function buildTripRow(trip, status){
 function renderTripRows(){
   const rowsEl = document.getElementById('tripRows');
   rowsEl.innerHTML = '';
-  if(trips.length === 0){
+  const everyone = tripListScope === 'everyone' && people.length > 1;
+  const list = everyone ? [...allTrips] : trips;
+  if(list.length === 0){
     rowsEl.innerHTML = `<div class="empty-note">No stays logged yet.</div>`;
     return;
   }
-  trips.sort((a,b)=>{
-    const aActive = classifyTrip(a) === 'active';
-    const bActive = classifyTrip(b) === 'active';
-    if(aActive !== bActive) return aActive ? -1 : 1;
+  // Everyone view is a plain timeline (newest start first); the per-person view keeps
+  // an active trip pinned to the top.
+  list.sort((a,b)=>{
+    if(!everyone){
+      const aActive = classifyTrip(a) === 'active';
+      const bActive = classifyTrip(b) === 'active';
+      if(aActive !== bActive) return aActive ? -1 : 1;
+    }
     return a.start < b.start ? 1 : a.start > b.start ? -1 : 0;
   });
 
   const completedRows = [];
   let inlineCount = 0;
-  for(const trip of trips){
+  for(const trip of list){
     const status = classifyTrip(trip);
-    const row = buildTripRow(trip, status);
+    const row = buildTripRow(trip, status, everyone);
     if(status === 'past') completedRows.push(row);
     else { rowsEl.appendChild(row); inlineCount++; }
   }
@@ -999,8 +1590,23 @@ function renderTripRows(){
 function wireTripRowActions(container){
   container.querySelectorAll('[data-action="remove"]').forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
+      const id = e.currentTarget.getAttribute('data-id');
+      const trip = allTrips.find(t => String(t.id) === String(id));
+      if(!trip) return;
+      const others = groupMates(trip);
       try{
-        await deleteTrip(e.currentTarget.getAttribute('data-id'));
+        if(others.length){
+          const owner = personById(trip.personId);
+          const choice = await askGroupScope(
+            others.length === 1 ? i18n('groupDeleteOne') : i18n('groupDeleteMany', { count: others.length }),
+            i18n('removeForEveryone'),
+            i18n('onlyName', { name: owner ? owner.name : '' })
+          );
+          if(!choice) return;
+          await deleteTrips(choice === 'all' ? [trip.id, ...others.map(t => t.id)] : [trip.id]);
+        } else {
+          await deleteTrip(trip.id);
+        }
       }catch(err){
         showToast('Could not delete that trip — please try again.');
         return;
@@ -1028,7 +1634,7 @@ function wireTripRowActions(container){
   container.querySelectorAll('[data-action="save-note"]').forEach(btn=>{
     btn.addEventListener('click', async (e)=>{
       const id = e.currentTarget.getAttribute('data-id');
-      const trip = trips.find(t => String(t.id) === String(id));
+      const trip = allTrips.find(t => String(t.id) === String(id));
       if(!trip) return;
       const note = document.getElementById(`noteEditor-${id}`).querySelector('textarea').value.trim();
       try{
@@ -1119,7 +1725,8 @@ document.getElementById('pcPrintBtn').addEventListener('click', ()=>{
   const controlISO = document.getElementById('pcDate').value || todayISO();
   const { windowStartISO, rows } = passportControlRows(trips, controlISO);
   const totalDays = usedDaysInWindow(trips, controlISO);
-  let html = `<h1>Schengen Guard Anywhere — passport control</h1><p>Control date ${fmt(controlISO)} · 180-day window ${fmt(windowStartISO)} to ${fmt(controlISO)} · ${dayCount(totalDays)} in the Schengen Area</p>`;
+  const pcPerson = activePerson();
+  let html = `<h1>Schengen Guard Anywhere — passport control</h1>${people.length > 1 && pcPerson ? `<p>${escapeHtml(i18n('passportFor', { name: pcPerson.name }))}</p>` : ''}<p>Control date ${fmt(controlISO)} · 180-day window ${fmt(windowStartISO)} to ${fmt(controlISO)} · ${dayCount(totalDays)} in the Schengen Area</p>`;
   html += '<table><thead><tr><th>Country</th><th>Entry</th><th>Exit</th><th>Days</th><th>Days in window</th></tr></thead><tbody>';
   for(const r of rows){
     const windowNote = r.isPartial ? ` (${fmt(r.clippedStart)} – ${fmt(r.clippedEnd)})` : '';
@@ -1132,6 +1739,161 @@ document.getElementById('pcPrintBtn').addEventListener('click', ()=>{
 
 // --- Safe Trip Checker (Trips tab) ---
 
+// The person (or people) the checker is running for: the trip's owner while editing,
+// otherwise whoever is selected in "Who is it for?".
+function checkerPeople(){
+  if(editingTripId !== null){
+    const trip = allTrips.find(t => t.id === editingTripId);
+    const owner = trip && personById(trip.personId);
+    return owner ? [owner] : [];
+  }
+  return selectedPeople();
+}
+
+// One person's view of the candidate stay: their own trips plus the candidate, never
+// anyone else's. `baseline` excludes the trip being edited so it isn't double-counted.
+function checkCandidateFor(person, candidate){
+  const baseline = tripsFor(person.id).filter(t => t.id !== editingTripId);
+  const hypothetical = baseline.concat([candidate]);
+  const overstay = tripOverstayInfo(hypothetical, candidate, 90);
+  return {
+    person, baseline, hypothetical, overstay,
+    daysLeft: overstay ? null : 90 - usedDaysInWindow(hypothetical, candidate.end)
+  };
+}
+
+// Worst first: anyone over the limit (earliest breach, then highest total), then the
+// smallest margin.
+function compareCheckResults(a, b){
+  if(!!a.overstay !== !!b.overstay) return a.overstay ? -1 : 1;
+  if(a.overstay){
+    if(a.overstay.date !== b.overstay.date) return a.overstay.date < b.overstay.date ? -1 : 1;
+    return b.overstay.used - a.overstay.used;
+  }
+  return a.daysLeft - b.daysLeft;
+}
+
+// Headline for several people at once — the worst case across the selection.
+function computeGroupVerdict(sortedResults){
+  const failing = sortedResults.filter(r => r.overstay);
+  if(failing.length){
+    const worst = failing[0];
+    const lastSafe = isoOf(addDays(toDate(worst.overstay.date), -1));
+    return {
+      status: 'fail',
+      headline: i18n('notSafeFor', { names: formatNames(failing.map(r => r.person.name)) }),
+      detail: i18n('worstBreach', { name: worst.person.name, date: fmt(worst.overstay.date), used: worst.overstay.used, lastSafe: fmt(lastSafe) }),
+      breakDate: worst.overstay.date
+    };
+  }
+  const tightest = sortedResults[0];
+  return {
+    status: 'ok',
+    headline: i18n('safeForEveryone'),
+    detail: i18n('tightestMargin', { name: tightest.person.name, days: dayCount(tightest.daysLeft) }),
+    breakDate: null,
+    daysLeft: tightest.daysLeft
+  };
+}
+
+function renderVerdictPeople(sortedResults, candidate){
+  const el = document.getElementById('verdictPeople');
+  const counted = coveredDates([candidate]).size;
+  el.innerHTML = '';
+  for(const r of sortedResults){
+    const row = document.createElement('div');
+    row.className = `verdict-person ${r.overstay ? 'verdict-person-fail' : 'verdict-person-ok'}`;
+    const result = r.overstay
+      ? `<span class="warn-icon" aria-hidden="true">&#9888;</span> ${escapeHtml(i18n('rowOver', { date: fmt(r.overstay.date), used: r.overstay.used }))}`
+      : escapeHtml(i18n('rowSafe', { days: dayCount(r.daysLeft) }));
+    row.innerHTML = `
+      <div class="verdict-person-top">
+        ${personTagHtml(r.person)}
+        <span class="verdict-person-stay">${escapeHtml(i18n('rowStay', { days: dayCount(counted) }))}</span>
+      </div>
+      <div class="verdict-person-result">${result}</div>
+      <button type="button" class="qc-link verdict-person-breakdown" aria-label="${escapeHtml(i18n('rowBreakdownAria', { name: r.person.name }))}">${escapeHtml(i18n('rowBreakdown'))}</button>`;
+    row.querySelector('.verdict-person-breakdown').addEventListener('click', ()=>{
+      openBreakdown(r.hypothetical, candidate.end, r.person);
+    });
+    el.appendChild(row);
+  }
+  el.hidden = false;
+}
+
+// "Better options" that keep everyone selected compliant: the shortest trim (leave the day
+// before the earliest breach) and the earliest shared start date. If neither works for
+// everyone, fall back to each person's own best option.
+function computeGroupSuggestions(results, start, end, excludedRanges){
+  const duration = Math.round((toDate(end) - toDate(start)) / 86400000) + 1;
+  const fitsEveryone = (cand) => results.every(r => !tripOverstayInfo(r.baseline.concat([cand]), cand, 90));
+  const suggestions = [];
+
+  const failing = results.filter(r => r.overstay);
+  const earliestBreach = failing.map(r => r.overstay.date).sort()[0];
+  const altEnd = isoOf(addDays(toDate(earliestBreach), -1));
+  if(altEnd >= start){
+    const trimmed = { start, end: altEnd, excludedRanges: excludedRanges.filter(r => r.end <= altEnd) };
+    if(fitsEveryone(trimmed)){
+      const altDays = Math.round((toDate(altEnd) - toDate(start)) / 86400000) + 1;
+      suggestions.push({ label: `Leave by <strong>${fmt(altEnd)}</strong> instead (${dayCount(altDays)}) to keep everyone compliant.`, start, end: altEnd });
+    }
+  }
+
+  const ownStarts = results.map(r => earliestCompliantStart(r.baseline, duration, 90));
+  if(ownStarts.every(Boolean)){
+    let d = toDate(ownStarts.sort()[ownStarts.length - 1]);
+    for(let i = 0; i < 400; i++){
+      const cand = { start: isoOf(d), end: isoOf(addDays(d, duration - 1)) };
+      if(fitsEveryone(cand)){
+        if(cand.start !== start){
+          suggestions.push({ label: `Shift the whole trip to start <strong>${fmt(cand.start)}</strong> instead (still ${dayCount(duration)}) to keep everyone compliant.`, start: cand.start, end: cand.end });
+        }
+        break;
+      }
+      d = addDays(d, 1);
+    }
+  }
+  if(suggestions.length) return { common: true, suggestions };
+
+  const perPerson = [];
+  for(const r of failing){
+    const own = computeTripSuggestion(r.hypothetical, r.baseline, start, end, 90).suggestions[0];
+    if(own) perPerson.push({ ...own, label: `<strong>${escapeHtml(r.person.name)}:</strong> ${own.label}` });
+  }
+  return { common: false, suggestions: perPerson };
+}
+
+function renderSuggestionButtons(suggestions, introText){
+  const suggestionsEl = document.getElementById('editStaySuggestions');
+  if(!suggestions.length && !introText) return;
+  suggestionsEl.style.display = 'grid';
+  if(introText){
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = introText;
+    suggestionsEl.appendChild(p);
+  }
+  for(const s of suggestions){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'suggestion-btn';
+    btn.innerHTML = s.label;
+    btn.addEventListener('click', ()=>{
+      pickStart = s.start; pickEnd = s.end;
+      document.getElementById('tripStart').value = s.start;
+      document.getElementById('tripEnd').value = s.end;
+      document.getElementById('pickStartLbl').textContent = `Entry: ${fmt(s.start)}`;
+      document.getElementById('pickEndLbl').textContent = `Exit: ${fmt(s.end)}`;
+      pendingExcludedRanges = pendingExcludedRanges.filter(r => r.start >= s.start && r.end <= s.end);
+      calCursor = new Date(toDate(s.start)); calCursor.setDate(1);
+      renderCalendar();
+      renderExclusionSection();
+    });
+    suggestionsEl.appendChild(btn);
+  }
+}
+
 function updateEditStayCompliance(){
   const msgEl = document.getElementById('editStayMsg');
   const errEl = document.getElementById('formError');
@@ -1139,62 +1901,58 @@ function updateEditStayCompliance(){
   const breakdownBtn = document.getElementById('editStayBreakdownBtn');
   const suggestionsEl = document.getElementById('editStaySuggestions');
   const bannerEl = document.getElementById('verdictBanner');
+  const peopleEl = document.getElementById('verdictPeople');
   const start = pickStart;
   const end = pickEnd;
   errEl.style.display = 'none';
   breakdownBtn.style.display = 'none';
   suggestionsEl.style.display = 'none';
   suggestionsEl.innerHTML = '';
+  peopleEl.hidden = true;
+  peopleEl.innerHTML = '';
   document.getElementById('clearPickBtn').style.display = (start || end) ? 'inline-flex' : 'none';
 
-  if(!start || !end){
-    msgEl.style.display = 'block';
-    msgEl.textContent = 'Pick an entry and exit date to check compliance before you save it.';
+  const stopWith = (message) => {
+    msgEl.style.display = message ? 'block' : 'none';
+    msgEl.textContent = message || '';
     renderVerdict(bannerEl, null);
     saveBtn.disabled = true;
     document.getElementById('logStayCue').style.display = 'none';
+  };
+
+  if(!start || !end){
+    stopWith('Pick an entry and exit date to check compliance before you save it.');
     return;
   }
   if(end < start){
-    msgEl.style.display = 'none';
-    msgEl.textContent = '';
+    stopWith('');
     errEl.textContent = 'Exit date must be on or after the entry date.';
     errEl.style.display = 'block';
-    renderVerdict(bannerEl, null);
-    saveBtn.disabled = true;
-    document.getElementById('logStayCue').style.display = 'none';
+    return;
+  }
+  const chosen = checkerPeople();
+  if(chosen.length === 0){
+    stopWith(i18n('selectSomeone'));
     return;
   }
 
   msgEl.style.display = 'none';
-  const baseline = trips.filter(t => t.id !== editingTripId);
   const candidate = { start, end, label: '__editStay__', excludedRanges: pendingExcludedRanges };
-  const hypothetical = baseline.concat([candidate]);
-  const overstay = tripOverstayInfo(hypothetical, candidate, 90);
-  breakdownBtn.style.display = 'inline-flex';
-  renderVerdict(bannerEl, computeVerdict(candidate, hypothetical));
-  if(overstay){
-    const suggestion = computeTripSuggestion(hypothetical, baseline, start, end, 90);
-    if(suggestion.suggestions.length){
-      suggestionsEl.style.display = 'grid';
-      for(const s of suggestion.suggestions){
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'suggestion-btn';
-        btn.innerHTML = s.label;
-        btn.addEventListener('click', ()=>{
-          pickStart = s.start; pickEnd = s.end;
-          document.getElementById('tripStart').value = s.start;
-          document.getElementById('tripEnd').value = s.end;
-          document.getElementById('pickStartLbl').textContent = `Entry: ${fmt(s.start)}`;
-          document.getElementById('pickEndLbl').textContent = `Exit: ${fmt(s.end)}`;
-          pendingExcludedRanges = pendingExcludedRanges.filter(r => r.start >= s.start && r.end <= s.end);
-          calCursor = new Date(toDate(s.start)); calCursor.setDate(1);
-          renderCalendar();
-          renderExclusionSection();
-        });
-        suggestionsEl.appendChild(btn);
-      }
+  const results = chosen.map(p => checkCandidateFor(p, candidate)).sort(compareCheckResults);
+  if(results.length === 1){
+    // One person: exactly the original single-trip result.
+    const r = results[0];
+    breakdownBtn.style.display = 'inline-flex';
+    renderVerdict(bannerEl, computeVerdict(candidate, r.hypothetical));
+    if(r.overstay){
+      renderSuggestionButtons(computeTripSuggestion(r.hypothetical, r.baseline, start, end, 90).suggestions);
+    }
+  } else {
+    renderVerdict(bannerEl, computeGroupVerdict(results));
+    renderVerdictPeople(results, candidate);
+    if(results.some(r => r.overstay)){
+      const group = computeGroupSuggestions(results, start, end, pendingExcludedRanges);
+      renderSuggestionButtons(group.suggestions, group.common ? '' : i18n('noCommonOption'));
     }
   }
   saveBtn.disabled = false;
@@ -1251,7 +2009,7 @@ function renderYearView(){
       const m = Number(el.getAttribute('data-month'));
       const lastDay = new Date(year, m+1, 0).getDate();
       const endIso = year+'-'+String(m+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
-      openBreakdown(trips, endIso);
+      openBreakdown(trips, endIso, activePerson());
     });
   });
 }
@@ -1335,7 +2093,7 @@ function renderHistoryView(){
   document.querySelectorAll('#checkerHistoryList .period-row').forEach(el=>{
     el.addEventListener('click', ()=>{
       const m = Number(el.getAttribute('data-month'));
-      openBreakdown(trips, months[m].endIso);
+      openBreakdown(trips, months[m].endIso, activePerson());
     });
   });
 }
@@ -1514,8 +2272,15 @@ function renderCalendar(){
 
 // Pre-fill the log-a-stay form with an existing trip's data and switch into edit mode
 function startEditTrip(id){
-  const trip = trips.find(t => String(t.id) === String(id));
+  const trip = allTrips.find(t => String(t.id) === String(id));
   if(!trip) return;
+  // Editing from the Everyone view: the form checks against the owner's own history,
+  // so make the owner the active person first.
+  if(trip.personId !== activePersonId){
+    setActivePersonId(trip.personId);
+    render();
+  }
+
 
   editingTripId = trip.id;
   pickStart = trip.start;
@@ -1531,6 +2296,8 @@ function startEditTrip(id){
   document.getElementById('formError').style.display = 'none';
   document.getElementById('addTripBtn').textContent = 'Update stay';
   document.getElementById('cancelEditBtn').style.display = 'block';
+  selectedPersonIds = new Set([trip.personId]);
+  renderWhoForChips();
 
   calCursor = new Date(toDate(trip.start)); calCursor.setDate(1);
   switchTab('calendar');
@@ -1552,6 +2319,8 @@ function stopEditTrip(){
   document.getElementById('formError').style.display = 'none';
   document.getElementById('addTripBtn').textContent = 'Log stay';
   document.getElementById('cancelEditBtn').style.display = 'none';
+  selectedPersonIds = new Set(activePersonId ? [activePersonId] : []);
+  renderWhoForChips();
   renderCalendar();
   renderExclusionSection();
 }
@@ -1740,6 +2509,43 @@ document.getElementById('clearPickBtn').addEventListener('click', ()=>{
   renderExclusionSection();
 });
 
+// Other trips saved together with this one for other people (same groupId).
+function groupMates(trip){
+  if(!trip || !trip.groupId) return [];
+  return allTrips.filter(t => t.groupId === trip.groupId && t.id !== trip.id);
+}
+
+// Two-choice dialog for grouped trips. Resolves 'all', 'one', or null (cancelled).
+function askGroupScope(message, allLabel, oneLabel){
+  const modal = document.getElementById('groupModal');
+  document.getElementById('groupModalMsg').textContent = message;
+  const allBtn = document.getElementById('groupAllBtn');
+  const oneBtn = document.getElementById('groupOneBtn');
+  const cancelBtn = document.getElementById('groupCancelBtn');
+  allBtn.textContent = allLabel;
+  oneBtn.textContent = oneLabel;
+  modal.style.display = 'flex';
+  allBtn.focus();
+  return new Promise(resolve => {
+    const done = (value) => {
+      modal.style.display = 'none';
+      allBtn.onclick = oneBtn.onclick = cancelBtn.onclick = null;
+      resolve(value);
+    };
+    allBtn.onclick = () => done('all');
+    oneBtn.onclick = () => done('one');
+    cancelBtn.onclick = () => done(null);
+  });
+}
+
+function sameRanges(a, b){
+  return JSON.stringify(a || []) === JSON.stringify(b || []);
+}
+
+function overlappingTrip(personId, start, end, ignoreIds){
+  return tripsFor(personId).find(ot => !ignoreIds.includes(ot.id) && start <= ot.end && end >= ot.start) || null;
+}
+
 document.getElementById('addTripBtn').addEventListener('click', async ()=>{
   const label = document.getElementById('tripLabel').value.trim();
   const start = document.getElementById('tripStart').value;
@@ -1756,21 +2562,62 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
     errEl.style.display = 'block';
     return;
   }
-  const overlapping = trips.find(ot => ot.id !== editingTripId && start <= ot.end && end >= ot.start);
-  if(overlapping){
-    const verb = editingTripId ? 'Update' : 'Log';
-    const proceed = confirm(`This overlaps with your logged stay in ${overlapping.label} (${fmt(overlapping.start)} – ${fmt(overlapping.end)}). ${verb} it anyway?`);
-    if(!proceed) return;
-  }
   const wasEditing = editingTripId !== null;
+  const editing = wasEditing ? allTrips.find(t => t.id === editingTripId) : null;
+  if(wasEditing && !editing){ stopEditTrip(); render(); return; }
+
+  // Which trips this save touches, per person.
+  let targets; // [{ personId, tripId|null }]
+  let detach = false;
+  if(wasEditing){
+    targets = [{ personId: editing.personId, tripId: editing.id }];
+    const mates = groupMates(editing);
+    const changed = editing.start !== start || editing.end !== end || editing.label !== label || !sameRanges(editing.excludedRanges, pendingExcludedRanges);
+    if(mates.length && changed){
+      const owner = personById(editing.personId);
+      const choice = await askGroupScope(
+        mates.length === 1 ? i18n('groupEditOne') : i18n('groupEditMany', { count: mates.length }),
+        i18n('applyToEveryone'),
+        i18n('onlyName', { name: owner ? owner.name : '' })
+      );
+      if(!choice) return;
+      if(choice === 'all') targets = targets.concat(mates.map(m => ({ personId: m.personId, tripId: m.id })));
+      else detach = true;
+    }
+  } else {
+    targets = selectedPeople().map(p => ({ personId: p.id, tripId: null }));
+    if(!targets.length){
+      errEl.textContent = i18n('selectSomeone');
+      errEl.style.display = 'block';
+      return;
+    }
+  }
+
+  // Overlap check per person; one confirm covers everyone affected.
+  const ignore = targets.map(x => x.tripId).filter(Boolean);
+  const overlaps = targets.map(x => ({ x, trip: overlappingTrip(x.personId, start, end, ignore) })).filter(o => o.trip);
+  if(overlaps.length){
+    let message;
+    if(people.length < 2){
+      const verb = wasEditing ? 'Update' : 'Log';
+      const o = overlaps[0].trip;
+      message = `This overlaps with your logged stay in ${o.label} (${fmt(o.start)} – ${fmt(o.end)}). ${verb} it anyway?`;
+    } else {
+      message = i18n('overlapPeople', { names: formatNames(overlaps.map(o => (personById(o.x.personId) || {}).name || '')) });
+    }
+    if(!confirm(message)) return;
+  }
+
   try{
     if(wasEditing){
       // Note intentionally omitted — the Calendar form no longer edits it, and
       // updateTrip() falls back to the existing note when none is passed, so a
       // plain date/country edit here never clobbers a note added from the trip row.
-      await updateTrip(editingTripId, start, end, label, pendingExcludedRanges);
+      for(const x of targets){
+        await updateTrip(x.tripId, start, end, label, pendingExcludedRanges, undefined, detach ? null : undefined);
+      }
     } else {
-      await insertTrip(start, end, label, pendingExcludedRanges);
+      await insertTripForPeople(targets.map(x => x.personId), start, end, label, pendingExcludedRanges);
     }
   }catch(e){
     errEl.textContent = 'Could not save that stay — please try again.';
@@ -1786,7 +2633,18 @@ document.getElementById('addTripBtn').addEventListener('click', async ()=>{
 document.getElementById('refDate').addEventListener('change', render);
 
 document.getElementById('resetBtn').addEventListener('click', async ()=>{
-  if(!confirm("Clear all logged stays? This cannot be undone.")) return;
+  const person = activePerson();
+  if(people.length > 1 && person){
+    if(!confirm(i18n('clearPersonConfirm', { name: person.name }))) return;
+    await deleteAllTrips(person.id);
+  } else {
+    if(!confirm("Clear all logged stays? This cannot be undone.")) return;
+    await deleteAllTrips();
+  }
+  render();
+});
+document.getElementById('resetAllBtn').addEventListener('click', async ()=>{
+  if(!confirm(i18n('clearEveryoneConfirm'))) return;
   await deleteAllTrips();
   render();
 });
@@ -1815,8 +2673,14 @@ function csvEscape(val){
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
+// Trips for the CSV/print export — the active person's, or everyone's — oldest first.
 function sortedTrips(){
-  return [...trips].sort((a,b)=> a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
+  const list = (exportScope === 'everyone' && people.length > 1) ? allTrips : trips;
+  return [...list].sort((a,b)=> a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
+}
+function personName(personId){
+  const p = personById(personId);
+  return p ? p.name : '';
 }
 
 function excludedDayCount(trip){
@@ -1826,11 +2690,11 @@ function excludedDayCount(trip){
 }
 
 document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
-  const header = ['Country','Entry date','Exit date','Days','Excluded days','Status'];
+  const header = [i18n('csvPerson'),'Country','Entry date','Exit date','Days','Excluded days','Status'];
   const rows = [header];
   for(const t of sortedTrips()){
     const days = Math.round((toDate(t.end) - toDate(t.start))/86400000) + 1;
-    rows.push([t.label || '', t.start, t.end, String(days), String(excludedDayCount(t)), classifyTrip(t)]);
+    rows.push([personName(t.personId), t.label || '', t.start, t.end, String(days), String(excludedDayCount(t)), classifyTrip(t)]);
   }
   const csv = rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -1846,10 +2710,10 @@ document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
 
 document.getElementById('printTripsBtn').addEventListener('click', ()=>{
   let html = `<h1>Schengen Guard Anywhere — trip history</h1><p>Generated ${fmt(todayISO())}</p>`;
-  html += '<table><thead><tr><th>Country</th><th>Entry</th><th>Exit</th><th>Days</th><th>Excluded days</th><th>Status</th></tr></thead><tbody>';
+  html += `<table><thead><tr><th>${escapeHtml(i18n('csvPerson'))}</th><th>Country</th><th>Entry</th><th>Exit</th><th>Days</th><th>Excluded days</th><th>Status</th></tr></thead><tbody>`;
   for(const t of sortedTrips()){
     const days = Math.round((toDate(t.end) - toDate(t.start))/86400000) + 1;
-    html += `<tr><td>${escapeHtml(t.label || '')}</td><td>${fmt(t.start)}</td><td>${fmt(t.end)}</td><td>${days}</td><td>${excludedDayCount(t)}</td><td>${classifyTrip(t)}</td></tr>`;
+    html += `<tr><td>${escapeHtml(personName(t.personId))}</td><td>${escapeHtml(t.label || '')}</td><td>${fmt(t.start)}</td><td>${fmt(t.end)}</td><td>${days}</td><td>${excludedDayCount(t)}</td><td>${classifyTrip(t)}</td></tr>`;
   }
   html += '</tbody></table>';
   document.getElementById('printArea').innerHTML = html;
@@ -1875,33 +2739,47 @@ function initNotifCheckboxes(){
   });
 }
 
-// Fires a local notification once per threshold per rolling window: tracks the lowest
-// threshold already notified for the current "streak" of being under 14 days remaining,
-// and resets once the count climbs back above every threshold (a new window has opened up).
+function loadNotifLastFired(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(NOTIF_LAST_FIRED_BY_PERSON_KEY) || '{}');
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  }catch(e){ return {}; }
+}
+function saveNotifLastFired(map){
+  try{ localStorage.setItem(NOTIF_LAST_FIRED_BY_PERSON_KEY, JSON.stringify(map)); }catch(e){}
+}
+
+// Fires a local notification once per threshold per rolling window, per person: tracks
+// the lowest threshold already notified for each person's current "streak" of being under
+// 14 days remaining, and resets once their count climbs back above every threshold.
 function checkNotifications(){
   if(!('Notification' in window) || Notification.permission !== 'granted') return;
-  const realRemaining = Math.max(0, 90 - usedDaysInWindow(trips, todayISO()));
   const thresholds = enabledThresholds();
-  if(realRemaining > 14){
-    localStorage.removeItem(NOTIF_LAST_FIRED_KEY);
-    return;
-  }
-  const lastFired = Number(localStorage.getItem(NOTIF_LAST_FIRED_KEY) || Infinity);
-  for(const threshold of thresholds){
-    if(realRemaining <= threshold && threshold < lastFired){
-      // Same red/amber split as the Home ring, baked into the icon since the OS draws
-      // the rest of the notification card and won't let the app recolour it directly.
-      const icon = realRemaining <= 7 ? 'icon-192-danger.png' : 'icon-192-warn.png';
-      try{
-        new Notification("Schengen Guard Anywhere", {
-          body: `${dayCount(realRemaining)} left of your 90-day allowance.`,
-          icon
-        });
-      }catch(e){}
-      localStorage.setItem(NOTIF_LAST_FIRED_KEY, String(threshold));
-      break;
+  const lastFiredMap = loadNotifLastFired();
+  for(const person of people){
+    const realRemaining = realDaysLeft(person.id);
+    if(realRemaining > 14){
+      delete lastFiredMap[person.id];
+      continue;
+    }
+    const lastFired = lastFiredMap[person.id] !== undefined ? Number(lastFiredMap[person.id]) : Infinity;
+    for(const threshold of thresholds){
+      if(realRemaining <= threshold && threshold < lastFired){
+        // Same red/amber split as the Home ring, baked into the icon since the OS draws
+        // the rest of the notification card and won't let the app recolour it directly.
+        const icon = realRemaining <= 7 ? 'icon-192-danger.png' : 'icon-192-warn.png';
+        const body = people.length > 1
+          ? i18n('notifPerson', { name: person.name, days: dayCount(realRemaining) })
+          : `${dayCount(realRemaining)} left of your 90-day allowance.`;
+        try{
+          new Notification("Schengen Guard Anywhere", { body, icon, tag: `schengen-guard-anywhere-${person.id}` });
+        }catch(e){}
+        lastFiredMap[person.id] = threshold;
+        break;
+      }
     }
   }
+  saveNotifLastFired(lastFiredMap);
 }
 
 // --- "How is this calculated?" day-by-day breakdown (Home + Safe Trip Checker) ---
@@ -1914,7 +2792,8 @@ function coveringTripLabel(list, iso){
   return trip ? (trip.label || '—') : 'In Schengen';
 }
 
-function openBreakdown(list, windowEndISO){
+// `person` (optional) names whose figures these are, when several people exist.
+function openBreakdown(list, windowEndISO, person){
   const windowEnd = toDate(windowEndISO);
   const windowStart = addDays(windowEnd, -179);
   const windowStartISO = isoOf(windowStart);
@@ -1957,7 +2836,8 @@ function openBreakdown(list, windowEndISO){
   let agedOut = 0;
   for(const iso of covered){ if(iso < windowStartISO) agedOut++; }
   const summaryEl = document.getElementById('breakdownSummary');
-  summaryEl.textContent = `Showing the 180 days ending ${fmt(windowEndISO)}. ${running} of those days count toward your 90-day limit.`
+  const forPerson = (people.length > 1 && person) ? i18n('breakdownFor', { name: person.name }) : '';
+  summaryEl.textContent = forPerson + `Showing the 180 days ending ${fmt(windowEndISO)}. ${running} of those days count toward your 90-day limit.`
     + (agedOut > 0 ? ` ${agedOut} earlier day${agedOut === 1 ? '' : 's'} you spent in Schengen ${agedOut === 1 ? 'has' : 'have'} aged out of this window and no longer count${agedOut === 1 ? 's' : ''}.` : '');
 
   document.getElementById('breakdownModal').style.display = 'flex';
@@ -1965,13 +2845,15 @@ function openBreakdown(list, windowEndISO){
 
 document.getElementById('homeBreakdownBtn').addEventListener('click', ()=>{
   const refISO = document.getElementById('refDate').value || todayISO();
-  openBreakdown(trips, refISO);
+  openBreakdown(trips, refISO, activePerson());
 });
 document.getElementById('editStayBreakdownBtn').addEventListener('click', ()=>{
   if(!pickStart || !pickEnd || pickEnd < pickStart) return;
   const label = document.getElementById('tripLabel').value;
-  const baseline = trips.filter(t => t.id !== editingTripId);
-  openBreakdown(baseline.concat([{ start: pickStart, end: pickEnd, label, excludedRanges: pendingExcludedRanges }]), pickEnd);
+  const person = checkerPeople()[0];
+  if(!person) return;
+  const baseline = tripsFor(person.id).filter(t => t.id !== editingTripId);
+  openBreakdown(baseline.concat([{ start: pickStart, end: pickEnd, label, excludedRanges: pendingExcludedRanges }]), pickEnd, person);
 });
 document.getElementById('breakdownCloseBtn').addEventListener('click', ()=>{
   document.getElementById('breakdownModal').style.display = 'none';
@@ -2020,7 +2902,15 @@ function updateLastBackupNote(){
 }
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
-  const payload = { schemaVersion: SCHEMA_VERSION, trips };
+  const payload = {
+    schemaVersion: SCHEMA_VERSION,
+    people: people.map(p => ({ id: p.id, name: p.name, colour: p.colour })),
+    trips: allTrips.map(t => {
+      const out = { id: t.id, personId: t.personId, start: t.start, end: t.end, label: t.label || '', excludedRanges: t.excludedRanges || [], note: t.note || '' };
+      if(t.groupId) out.groupId = t.groupId;
+      return out;
+    })
+  };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2040,6 +2930,63 @@ document.getElementById('importBtn').addEventListener('click', ()=>{
   document.getElementById('importFile').click();
 });
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function isValidRange(r){
+  return r && typeof r.start === 'string' && typeof r.end === 'string' && ISO_DATE_RE.test(r.start) && ISO_DATE_RE.test(r.end) && r.start <= r.end;
+}
+
+// Validates a backup without writing anything. Returns { people, trips } (people is null for
+// a pre-people file) or { error }. Every check happens here, so a bad file never half-imports.
+function parseBackup(parsed){
+  const notOurs = "That file doesn't look like a Schengen Guard Anywhere backup.";
+  const malformed = 'That backup file is malformed — no changes were made.';
+  let rawTrips, rawPeople = null;
+  if(Array.isArray(parsed)){
+    rawTrips = parsed; // very old shape: a bare array of trips
+  } else if(parsed && typeof parsed === 'object' && Array.isArray(parsed.trips) && typeof parsed.schemaVersion === 'number'){
+    if(parsed.schemaVersion > SCHEMA_VERSION){
+      return { error: "This backup was made with a newer version of Schengen Guard Anywhere and can't be read here — update the app first." };
+    }
+    rawTrips = parsed.trips;
+    if(parsed.schemaVersion >= 2){
+      if(!Array.isArray(parsed.people)) return { error: malformed };
+      rawPeople = parsed.people;
+    }
+  } else {
+    return { error: notOurs };
+  }
+  if(!rawTrips.every(it => isValidRange(it) && (it.excludedRanges === undefined || (Array.isArray(it.excludedRanges) && it.excludedRanges.every(isValidRange))))){
+    return { error: malformed };
+  }
+
+  let outPeople = null;
+  if(rawPeople){
+    const seenIds = new Set();
+    outPeople = [];
+    for(const it of rawPeople){
+      if(!it || typeof it.id !== 'string' || !it.id || seenIds.has(it.id) || typeof it.name !== 'string') return { error: malformed };
+      if(validatePersonName(it.name, null, outPeople)) return { error: malformed };
+      seenIds.add(it.id);
+      outPeople.push({ id: it.id, name: it.name.trim(), colour: PERSON_COLOURS.includes(it.colour) ? it.colour : nextFreeColour(outPeople) });
+    }
+    if(!rawTrips.every(it => seenIds.has(it.personId))) return { error: malformed };
+    if(outPeople.length === 0 && rawTrips.length) return { error: malformed };
+  }
+
+  const outTrips = rawTrips.map(it => {
+    const trip = {
+      id: typeof it.id === 'string' && it.id ? it.id : newId(),
+      personId: rawPeople ? it.personId : null,
+      start: it.start, end: it.end, label: typeof it.label === 'string' ? it.label : '',
+      excludedRanges: Array.isArray(it.excludedRanges) ? it.excludedRanges.map(r => ({ start: r.start, end: r.end })) : [],
+      note: typeof it.note === 'string' ? it.note : ''
+    };
+    if(typeof it.groupId === 'string' && it.groupId) trip.groupId = it.groupId;
+    return trip;
+  });
+  return { people: outPeople, trips: outTrips };
+}
+
 document.getElementById('importFile').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   e.target.value = ''; // allow re-selecting the same file later
@@ -2057,65 +3004,192 @@ document.getElementById('importFile').addEventListener('change', async (e)=>{
     return;
   }
 
-  if(!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.trips) || typeof parsed.schemaVersion !== 'number'){
-    errEl.textContent = "That file doesn't look like a Schengen Guard Anywhere backup.";
+  const result = parseBackup(parsed);
+  if(result.error){
+    errEl.textContent = result.error;
     errEl.style.display = 'block';
     return;
   }
-  if(parsed.schemaVersion > SCHEMA_VERSION){
-    errEl.textContent = "This backup was made with a newer version of Schengen Guard Anywhere and can't be read here — update the app first.";
-    errEl.style.display = 'block';
-    return;
-  }
-  const validTrips = parsed.trips.every(it => it && typeof it.start === 'string' && typeof it.end === 'string');
-  if(!validTrips){
-    errEl.textContent = 'That backup file is malformed — no changes were made.';
-    errEl.style.display = 'block';
-    return;
-  }
+  pendingImportTrips = result.trips;
+  pendingImportPeople = result.people;
+  pendingImportPersonId = null;
 
-  // schemaVersion 1 is the only shape so far, so no migration step is needed yet.
-  pendingImportTrips = parsed.trips.map(it => ({
-    id: typeof it.id === 'string' ? it.id : newId(),
-    start: it.start, end: it.end, label: it.label || '',
-    excludedRanges: Array.isArray(it.excludedRanges) ? it.excludedRanges : []
-  }));
-
-  if(trips.length === 0){
+  if(!pendingImportPeople){
+    // Pre-people backup: ask once who the trips belong to (no question when there's only
+    // one person), then merge/replace as before.
+    if(people.length > 1){
+      openImportPersonPicker();
+      return;
+    }
+    pendingImportPersonId = people[0].id;
+    if(allTrips.length === 0){
+      await applyImport('merge');
+      return;
+    }
+    document.getElementById('importMergeBtn').textContent = 'Merge with current trips';
+    document.getElementById('importReplaceBtn').textContent = 'Replace current trips';
+    document.getElementById('importModalMsg').textContent =
+      `You have ${allTrips.length} trip${allTrips.length === 1 ? '' : 's'} saved and this backup has ${pendingImportTrips.length}. Merge them, or replace what's on this device?`;
+    document.getElementById('importModal').style.display = 'flex';
+    return;
+  }
+  // A fresh device (no trips, only the default person) just takes the backup as-is.
+  if(allTrips.length === 0 && people.length === 1){
     await applyImport('replace');
     return;
   }
+  document.getElementById('importMergeBtn').textContent = 'Merge with current trips';
+  document.getElementById('importReplaceBtn').textContent = 'Replace current trips';
   document.getElementById('importModalMsg').textContent =
-    `You have ${trips.length} trip${trips.length === 1 ? '' : 's'} saved and this backup has ${pendingImportTrips.length}. Merge them, or replace what's on this device?`;
+    `You have ${allTrips.length} trip${allTrips.length === 1 ? '' : 's'} saved and this backup has ${pendingImportTrips.length}. Merge them, or replace what's on this device?`;
   document.getElementById('importModal').style.display = 'flex';
 });
 
+function openImportPersonPicker(){
+  document.getElementById('importPersonMsg').textContent =
+    i18n('importOldFile', { trips: countOf(pendingImportTrips.length, 'trip', 'tripsWord') }) + ' ' + i18n('importWhichPerson');
+  const list = document.getElementById('importPersonList');
+  list.innerHTML = '';
+  for(const p of people){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-block person-pick-btn';
+    btn.innerHTML = `${personDotHtml(p)}<span>${escapeHtml(p.name)}</span>`;
+    btn.addEventListener('click', async ()=>{
+      document.getElementById('importPersonModal').style.display = 'none';
+      pendingImportPersonId = p.id;
+      const existing = tripsFor(p.id).length;
+      if(existing === 0){
+        await applyImport('merge');
+        return;
+      }
+      document.getElementById('importMergeBtn').textContent = i18n('importMergeIntoPerson', { name: p.name });
+      document.getElementById('importReplaceBtn').textContent = i18n('importReplacePerson', { name: p.name });
+      document.getElementById('importModalMsg').textContent = i18n('importPersonMsg', {
+        name: p.name,
+        existing: countOf(existing, 'trip', 'tripsWord'),
+        incoming: countOf(pendingImportTrips.length, 'trip', 'tripsWord')
+      });
+      document.getElementById('importModal').style.display = 'flex';
+    });
+    list.appendChild(btn);
+  }
+  document.getElementById('importPersonModal').style.display = 'flex';
+}
+document.getElementById('importPersonCancelBtn').addEventListener('click', ()=>{
+  clearPendingImport();
+  document.getElementById('importPersonModal').style.display = 'none';
+});
+
+function clearPendingImport(){
+  pendingImportTrips = null;
+  pendingImportPeople = null;
+  pendingImportPersonId = null;
+}
+
+function tripKey(t){ return `${t.personId}|${t.start}|${t.end}|${t.label || ''}`; }
+
+// Works out every write first, so nothing is sent unless the whole backup is usable.
+// Backup ids may not be valid Postgres UUIDs (e.g. from the local-only sibling app), so
+// imported people, trips and groups always get fresh ids here.
+function planImport(mode){
+  const groupMap = new Map();
+  const freshGroup = (g) => {
+    if(!g) return undefined;
+    if(!groupMap.has(g)) groupMap.set(g, newId());
+    return groupMap.get(g);
+  };
+  const plan = { peopleToInsert: [], tripsToInsert: [], tripIdsToDelete: [], travellerIdsToDelete: [] };
+  let incoming, keep;
+
+  if(pendingImportPersonId){
+    // Pre-people file: every trip goes to the chosen person.
+    incoming = pendingImportTrips.map(t => ({ ...t, personId: pendingImportPersonId }));
+    if(mode === 'replace'){
+      plan.tripIdsToDelete = tripsFor(pendingImportPersonId).map(t => t.id);
+      keep = allTrips.filter(t => t.personId !== pendingImportPersonId);
+    } else {
+      keep = allTrips;
+    }
+  } else {
+    if(mode === 'replace' && pendingImportPeople.length > MAX_PEOPLE) return { error: i18n('importTooManyPeopleReplace') };
+    // Match people by id, then by name (case-insensitive); anyone else is added.
+    const idMap = new Map();
+    const matched = new Set();
+    for(const fp of pendingImportPeople){
+      const match = personById(fp.id) || people.find(p => p.name.toLocaleLowerCase() === fp.name.toLocaleLowerCase())
+        || plan.peopleToInsert.find(p => p.name.toLocaleLowerCase() === fp.name.toLocaleLowerCase());
+      if(match){ idMap.set(fp.id, match.id); matched.add(match.id); continue; }
+      const current = people.concat(plan.peopleToInsert);
+      const colour = current.some(p => p.colour === fp.colour) ? nextFreeColour(current) : fp.colour;
+      const person = { id: newId(), name: fp.name, colour };
+      plan.peopleToInsert.push(person);
+      idMap.set(fp.id, person.id);
+    }
+    incoming = pendingImportTrips.map(t => ({ ...t, personId: idMap.get(t.personId) }));
+    if(mode === 'replace'){
+      plan.travellerIdsToDelete = people.filter(p => !matched.has(p.id)).map(p => p.id);
+      plan.tripIdsToDelete = allTrips.map(t => t.id);
+      keep = [];
+    } else {
+      if(people.length + plan.peopleToInsert.length > MAX_PEOPLE) return { error: i18n('importTooManyPeople') };
+      keep = allTrips;
+    }
+  }
+
+  const seen = new Set(keep.map(tripKey));
+  for(const t of incoming){
+    const key = tripKey(t);
+    if(seen.has(key)) continue; // already in the account — skip in merge mode
+    seen.add(key);
+    plan.tripsToInsert.push({ ...t, id: newId(), groupId: freshGroup(t.groupId) });
+  }
+  return plan;
+}
+
+// Inserts first and deletes last, so a dropped connection part-way through can leave
+// duplicates to tidy up but never loses existing trips.
 async function applyImport(mode){
   if(!pendingImportTrips) return;
-  if(mode === 'replace'){
-    await deleteAllTrips();
+  const errEl = document.getElementById('backupError');
+  document.getElementById('importModal').style.display = 'none';
+  const plan = planImport(mode);
+  if(plan.error){
+    clearPendingImport();
+    errEl.textContent = plan.error;
+    errEl.style.display = 'block';
+    return;
   }
-  // Imported ids may not be valid Postgres UUIDs (e.g. a backup from the local-only
-  // sibling app) — always insert as new rows and let the database assign fresh ids.
-  const rows = pendingImportTrips.map(it => ({
-    start_date: it.start, end_date: it.end, country: it.label, excluded_ranges: it.excludedRanges || []
-  }));
-  const { error } = await db.from('trips').insert(rows);
-  if(error){
-    const errEl = document.getElementById('backupError');
-    errEl.textContent = 'Could not save that stay — please try again.';
+  try{
+    if(plan.peopleToInsert.length){
+      const { error } = await db.from('travellers').insert(plan.peopleToInsert.map(travellerRow));
+      if(error) throw error;
+    }
+    if(plan.tripsToInsert.length){
+      const { error } = await db.from('trips').insert(plan.tripsToInsert.map(tripToRow));
+      if(error) throw error;
+    }
+    if(plan.tripIdsToDelete.length){
+      const { error } = await db.from('trips').delete().in('id', plan.tripIdsToDelete);
+      if(error) throw error;
+    }
+    if(plan.travellerIdsToDelete.length){
+      const { error } = await db.from('travellers').delete().in('id', plan.travellerIdsToDelete);
+      if(error) throw error;
+    }
+  }catch(err){
+    errEl.textContent = 'Could not finish restoring that backup — please check your trips and try again.';
     errEl.style.display = 'block';
   }
-  pendingImportTrips = null;
-  document.getElementById('importModal').style.display = 'none';
-  await loadTrips();
+  clearPendingImport();
+  await loadAccount(); // re-reads people, keeps the active person if they still exist
   render();
 }
 
 document.getElementById('importMergeBtn').addEventListener('click', ()=> applyImport('merge'));
 document.getElementById('importReplaceBtn').addEventListener('click', ()=> applyImport('replace'));
 document.getElementById('importCancelBtn').addEventListener('click', ()=>{
-  pendingImportTrips = null;
+  clearPendingImport();
   document.getElementById('importModal').style.display = 'none';
 });
 
@@ -2209,7 +3283,7 @@ document.getElementById('signUpBtn').addEventListener('click', async ()=>{
   }
   if(data.user){
     currentUser = data.user;
-    await loadTrips();
+    if(!(await loadAccountOrExplain())) return;
     showSignedIn();
     render();
   }
@@ -2227,7 +3301,7 @@ document.getElementById('signInBtn').addEventListener('click', async ()=>{
     return;
   }
   currentUser = data.user;
-  await loadTrips();
+  if(!(await loadAccountOrExplain())) return;
   showSignedIn();
   render();
 });
@@ -2236,14 +3310,32 @@ document.getElementById('signOutBtn').addEventListener('click', async ()=>{
   await db.auth.signOut();
   currentUser = null;
   trips = [];
+  allTrips = [];
+  people = [];
   document.getElementById('authEmail').value = '';
   document.getElementById('authPassword').value = '';
   document.getElementById('authError').style.display = 'none';
   showSignedOut();
 });
 
+// Loads people and trips after sign-in. If the travellers table isn't there yet (the SQL
+// step in the README hasn't been run), says so on the sign-in screen instead of half-loading.
+async function loadAccountOrExplain(){
+  try{
+    await loadAccount();
+    return true;
+  }catch(e){
+    showSignedOut();
+    const errEl = document.getElementById('authError');
+    errEl.textContent = "Your trips couldn't be loaded. If the app was just updated, the database needs the travellers step from the README.";
+    errEl.style.display = 'block';
+    return false;
+  }
+}
+
 (async function init(){
   applyTheme(localStorage.getItem(THEME_KEY) || 'system');
+  applyStaticStrings();
 
   renderEtiasLastChecked();
 
@@ -2263,7 +3355,7 @@ document.getElementById('signOutBtn').addEventListener('click', async ()=>{
       return;
     }
     currentUser = session.user;
-    await loadTrips();
+    if(!(await loadAccountOrExplain())) return;
     showSignedIn();
     render();
   } else {

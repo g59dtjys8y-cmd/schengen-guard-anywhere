@@ -21,6 +21,7 @@ Pick whichever matches how you want your data handled. Everything else about the
 - **Home dashboard** — an arc progress ring shows days left of your rolling 90, with a gold EU-star marker that travels around it and shifts color as the limit approaches. Below it, a "Quick check" card lets you check compliance as of any reference date, and — once you have a trip logged — an "Active trip" or "Next trip" card surfaces the most relevant one, with the country flag and day count front and center, matching how trips are shown on the Trips tab.
 - **Tabbed navigation** — Home, Calendar, Trips, and Settings, with a fixed bottom tab bar for quick switching between views.
 - **Safe Check and Log a Trip** — the Calendar tab leads with this: pick a country, then tap an entry date and an exit date on the calendar to log (or edit) a stay, with a side trip markable on the same screen. Every date also shows your remaining day allowance as of that day, with past/active, planned, overstay, and excluded days visually distinguished.
+- **Multiple people** — track up to 8 travellers on one account (one person per travel document, so two passports means two people). The 90/180 rule is checked separately for each person. Switch the active person from the chip at the top of Home (the choice is per device, like the theme); with two or more people, a compact strip shows everyone's days left. Log one stay for several people at once with the "Who is it for?" chips, and the Safe Check shows the worst case across everyone plus a row per person. Stays saved together stay linked, so editing or removing one offers to apply the change to everyone on that trip. Manage people from Settings → People.
 - **Live compliance preview** — as you pick entry/exit dates, immediate feedback shows whether that stay would keep you compliant and how many days of margin you'd have, *before* you save it, with concrete alternate-date suggestions if it wouldn't.
 - **Full Calendar View** — a collapsed section at the bottom of the Calendar tab (so it stays out of the way of logging a trip): a year-by-year nav, a running total for the year, and a 12-month grid you can share as a passport-stamp-styled recap card.
 - **Countries visited** — the Trips tab opens with a stamp-collection card: a progress bar toward all 29 Schengen countries, a peek at the most recently visited ones (flags + a "Last stamped" caption), and your top country by days spent. Tap through to a full passport-stamp grid — visited countries first, everything not yet visited collapsed out of the way below.
@@ -43,7 +44,7 @@ Pick whichever matches how you want your data handled. Everything else about the
 
 - Plain HTML, CSS, and JavaScript — no build step, no framework.
 - Self-hosted [Source Serif 4](https://github.com/adobe-fonts/source-serif) (SIL OFL, see `fonts/source-serif-4/OFL.txt`) in a light-first "Broadsheet" design system driven by CSS custom properties.
-- [Supabase](https://supabase.com) for authentication and the Postgres database (a `trips` table, scoped per-user with Row Level Security).
+- [Supabase](https://supabase.com) for authentication and the Postgres database (`trips` and `travellers` tables, scoped per-user with Row Level Security).
 - A web app manifest and service worker for PWA installability (app shell only — trip data is never cached offline).
 
 ## Project files
@@ -69,6 +70,7 @@ There's no build step for the app itself, but a small set of dev-only Node scrip
 | `npm run check:js` | `script.js` parses (`node --check`) |
 | `npm run check:parity -- <path-to-sibling-checkout>` | Diffs element ids against [Schengen Guard](https://github.com/g59dtjys8y-cmd/schengen-guard) so a feature added to one app and forgotten in the other gets flagged, not shipped silently. Intentional one-sided ids (e.g. the sign-in screen, which only exists here) are documented in `scripts/parity-allowlist.json`. |
 | `npm run smoke` | Boots the app in headless Chromium and confirms every primary tab renders with zero console errors |
+| `npm run test:people` | Acceptance tests for multiple people (migration, per-person rules, the multi-person checker, grouped edits, notifications, badge, backup round trip), run against an in-memory Supabase mock (`scripts/supabase-mock.mjs`) |
 | `npm run check` | Runs the HTML, JS, and smoke checks together |
 
 `.github/workflows/checks.yml` runs all of the above (plus the parity check against a live checkout of the sibling repo) on every push and pull request.
@@ -93,10 +95,14 @@ There's no build step for the app itself, but a small set of dev-only Node scrip
    create policy "Users manage own trips" on trips for all
      using (auth.uid() = user_id) with check (auth.uid() = user_id);
    ```
+   Then run [`sql/2026-10-travellers.sql`](sql/2026-10-travellers.sql), which adds the `travellers` table and links each trip to a traveller.
+
    Already have a `trips` table from before the `note` column existed? Add it with:
    ```sql
    alter table trips add column if not exists note text not null default '';
    ```
+
+   **Upgrading an existing database to multiple people:** run [`sql/2026-10-travellers.sql`](sql/2026-10-travellers.sql) in the Supabase SQL editor *before* deploying the app version that adds people. It creates a "Me" traveller for every account that has trips, attaches all existing trips to it, and tightens the `trips` policy so a trip can only point at one of your own travellers. It's one transaction and safe to re-run. Until it has run, the updated app shows a message on the sign-in screen instead of loading trips.
 3. In **Authentication → Providers**, confirm Email is enabled. Optionally turn off "Confirm email" for simpler local testing.
 4. In `script.js`, replace `SUPABASE_URL` and `SUPABASE_KEY` with your own project's values (found under **Settings → API**).
 5. Serve the files with any static host — GitHub Pages, Netlify, Vercel, or just open `index.html` directly.
