@@ -31,7 +31,7 @@ Pick whichever matches how you want your data handled. Everything else about the
 - **"How is this calculated?"** — a day-by-day breakdown of the rolling 180-day window behind any number, with consecutive same-status days collapsed into readable date ranges.
 - **Passport control** — a per-trip view of the rolling 180-day window for a chosen date, handy to show a border official alongside your passport stamps.
 - **Overstay warnings & overlap detection** — flagged directly against the trip responsible, with the exact date and running total.
-- **CSV / print export** — for handing trip history to a border official or visa office, separate from the JSON backup.
+- **CSV / print export** — for handing trip history to a border official or visa office, separate from the JSON backup. With several people, pick who it's for: one person gets their own file (named after them, no Person column); several get one file with a Person column, or one file each. Printing starts each person on a new page with their days used and remaining. Side trips are marked in both. (The JSON backup always covers everyone.)
 - **Notification thresholds** — opt in (from Settings) to a browser notification when your days remaining hits 14, 7, or 3, with a warning (amber, "!") or danger (red, "!") icon depending on how close you are.
 - **Light, dark & auto themes** — a per-device preference, not synced.
 - **Account sync via Supabase** — sign in with email/password; your trips are stored in a Supabase Postgres database tied to your account, scoped by Row Level Security, and available on every device you sign into. You're automatically signed out if the app hasn't been opened in 1 day.
